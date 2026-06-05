@@ -1,0 +1,55 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="{% static 'favicon.ico' %}" />
+  <title>Coding Factory - Discord</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      display: flex; min-height: 100vh; margin: 0;
+      align-items: center; justify-content: center;
+      background: #0f1117; color: #e7e9ee;
+    }
+    .card {
+      max-width: 28rem; padding: 2.5rem; text-align: center;
+      background: #171a23; border-radius: 1rem; box-shadow: 0 10px 40px rgba(0,0,0,.4);
+    }
+    .logo { width: 4rem; height: 4rem; margin-bottom: 1rem; }
+    h1 { font-size: 1.25rem; margin: 0 0 1.5rem; }
+    button {
+      font: inherit; cursor: pointer; padding: .75rem 1.5rem; border: 0;
+      border-radius: .5rem; background: #5865F2; color: #fff;
+    }
+    button:hover { background: #4752c4; }
+    .ok { color: #43b581; } .err { color: #f04747; }
+    footer { margin-top: 2rem; font-size: .75rem; opacity: .5; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <img class="logo" src="{% static 'coding_factory_icon.svg' %}" alt="Coding Factory" />
+    <h1>Discord Coding Factory</h1>
+
+    {% if state == "confirm" %}
+      <p>Clique sur le bouton pour finaliser ton inscription au serveur.</p>
+      <form method="post" action="{% url 'onboarding' %}">
+        <input type="hidden" name="token" value="{{ token }}" />
+        <button type="submit">Confirmer mon inscription</button>
+      </form>
+    {% elif state == "success" %}
+      <p class="ok">
+        Bienvenue {{ nickname }} !<br />
+        Ton pseudo et ton rôle ont été mis à jour. Tu peux fermer cette page.
+      </p>
+    {% else %}
+      <p class="err">{{ message }}</p>
+    {% endif %}
+
+    <footer>© Coding Factory — {% now "Y" %}</footer>
+  </div>
+</body>
+</html>

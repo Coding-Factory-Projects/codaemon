@@ -1,0 +1,198 @@
+"""Discord actions performed over the REST API (no gateway needed).
+
+Plain sync functions: the Django web views call them directly, and the
+discord.py gateway worker calls them via ``asyncio.to_thread(...)``.
+
+Layout: constants and routes first, then the public API, then HTTP internals.
+"""
+
+import logging
+
+import httpx
+from django.conf import settings
+
+from bot.channels import CHANNEL_TEMPLATE
+
+logger = logging.getLogger(__name__)
+
+API_BASE = "https://discord.com/api/v10"
+VIEW_CHANNEL = 1 << 10  # 1024
+CATEGORY = 4
+CHANNEL_TYPE = {"text": 0, "voice": 2}
+
+
+# --- Routes (all URL construction lives here) ---
+
+
+def _guild() -> str:
+    return str(settings.DISCORD_GUILD_ID)
+
+
+def _roles_route() -> str:
+    return f"/guilds/{_guild()}/roles"
+
+
+def _channels_route() -> str:
+    return f"/guilds/{_guild()}/channels"
+
+
+def _channel_route(channel_id: str) -> str:
+    return f"/channels/{channel_id}"
+
+
+def _member_route(user_id: str) -> str:
+    return f"/guilds/{_guild()}/members/{user_id}"
+
+
+def _member_role_route(user_id: str, role_id: str) -> str:
+    return f"/guilds/{_guild()}/members/{user_id}/roles/{role_id}"
+
+
+# --- Public API ---
+
+
+def create_class_category(name: str, campus: str, existing_role_id: str | None = None) -> str:
+    """Idempotently create a class role + private category + channel template.
+
+    Returns the (existing or newly created) role id. Called by the learnd webhook.
+    """
+    class_name = _class_name(name, campus)
+    with _client() as client:
+        role = None
+        if existing_role_id:
+            role = _find_role_by_id(client, existing_role_id)
+        if role is None:
+            role = _find_role(client, class_name)
+        if role is None:
+            role = _create_role(client, class_name)
+            logger.info("Created role %s (%s)", class_name, role["id"])
+
+        category = _find_category(client, class_name)
+        if category is None:
+            category = _create_category(client, class_name, role["id"])
+            _create_channels(client, category["id"])
+            logger.info("Created category and channels for %s", class_name)
+        else:
+            logger.info("Category %s already exists, skipping creation", class_name)
+
+        return role["id"]
+
+
+def create_category(name: str) -> str:
+    """Idempotently create a private category + channel template (no role).
+
+    Called by the ``/createcategory`` slash command.
+    """
+    with _client() as client:
+        category = _find_category(client, name)
+        if category is None:
+            category = _create_category(client, name, role_id=None)
+            _create_channels(client, category["id"])
+            logger.info("Created category %s", name)
+        return category["id"]
+
+
+def delete_category(category_id: str) -> None:
+    """Delete a category and every channel it contains."""
+    with _client() as client:
+        resp = client.get(_channels_route())
+        resp.raise_for_status()
+        children = [c for c in resp.json() if c.get("parent_id") == str(category_id)]
+        for child in children:
+            client.delete(_channel_route(child["id"])).raise_for_status()
+        client.delete(_channel_route(category_id)).raise_for_status()
+        logger.info("Deleted category %s (%d channels)", category_id, len(children))
+
+
+def apply_onboarding(
+    user_id: str,
+    nickname: str,
+    add_role_ids: list[str],
+    remove_role_ids: list[str],
+) -> None:
+    """Set a member's nickname, add roles, and remove roles (onboarding)."""
+    with _client() as client:
+        client.patch(_member_route(user_id), json={"nick": nickname}).raise_for_status()
+        for role_id in add_role_ids:
+            if role_id:
+                client.put(_member_role_route(user_id, role_id)).raise_for_status()
+        for role_id in remove_role_ids:
+            if role_id:
+                client.delete(_member_role_route(user_id, role_id)).raise_for_status()
+        logger.info("Applied onboarding for member %s (%s)", user_id, nickname)
+
+
+# --- Internals ---
+
+
+def _client() -> httpx.Client:
+    return httpx.Client(
+        base_url=API_BASE,
+        headers={"Authorization": f"Bot {settings.DISCORD_TOKEN}"},
+        timeout=30,
+    )
+
+
+def _class_name(name: str, campus: str) -> str:
+    return f"{name} - {campus}"
+
+
+def _category_overwrites(role_id: str | None) -> list[dict]:
+    overwrites = [
+        # Deny @everyone (its id == the guild id) so the class area is private.
+        {"id": str(settings.DISCORD_EVERYONE_ROLE_ID), "type": 0, "deny": str(VIEW_CHANNEL)},
+        {"id": str(settings.DISCORD_PRODUCT_OWNERS_ROLE_ID), "type": 0, "allow": str(VIEW_CHANNEL)},
+    ]
+    if role_id:
+        overwrites.append({"id": str(role_id), "type": 0, "allow": str(VIEW_CHANNEL)})
+    return overwrites
+
+
+def _find_role(client: httpx.Client, name: str) -> dict | None:
+    resp = client.get(_roles_route())
+    resp.raise_for_status()
+    return next((r for r in resp.json() if r["name"] == name), None)
+
+
+def _find_role_by_id(client: httpx.Client, role_id: str) -> dict | None:
+    resp = client.get(_roles_route())
+    resp.raise_for_status()
+    return next((r for r in resp.json() if r["id"] == str(role_id)), None)
+
+
+def _find_category(client: httpx.Client, name: str) -> dict | None:
+    resp = client.get(_channels_route())
+    resp.raise_for_status()
+    return next((c for c in resp.json() if c["type"] == CATEGORY and c["name"] == name), None)
+
+
+def _create_role(client: httpx.Client, name: str) -> dict:
+    resp = client.post(_roles_route(), json={"name": name, "hoist": True, "mentionable": True})
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _create_category(client: httpx.Client, name: str, role_id: str | None) -> dict:
+    resp = client.post(
+        _channels_route(),
+        json={
+            "name": name,
+            "type": CATEGORY,
+            "permission_overwrites": _category_overwrites(role_id),
+        },
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _create_channels(client: httpx.Client, parent_id: str) -> None:
+    for channel in CHANNEL_TEMPLATE:
+        resp = client.post(
+            _channels_route(),
+            json={
+                "name": channel["name"],
+                "type": CHANNEL_TYPE[channel["type"]],
+                "parent_id": parent_id,
+            },
+        )
+        resp.raise_for_status()

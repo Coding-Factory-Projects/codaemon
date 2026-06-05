@@ -1,0 +1,23 @@
+services:
+  web:
+    image: ghcr.io/coding-factory-projects/codaemon:${IMAGE_TAG:-latest}
+    restart: always
+    env_file: .env
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             exec gunicorn --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-2} --access-logfile - config.wsgi:application"
+    volumes:
+      - data:/app/data
+    ports:
+      - "127.0.0.1:${GUNICORN_PORT:-8200}:8000"
+
+  runbot:
+    image: ghcr.io/coding-factory-projects/codaemon:${IMAGE_TAG:-latest}
+    restart: always
+    env_file: .env
+    command: python manage.py runbot
+    volumes:
+      - data:/app/data
+
+volumes:
+  data:
