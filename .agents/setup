@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+run_step() {
+    local label="$1"
+    shift
+
+    local started=$SECONDS
+    printf '\n==> %s\n' "$label"
+    "$@"
+    printf '<== %s (%ss)\n' "$label" "$((SECONDS - started))"
+}
+
+ensure_curl() {
+    if command -v curl >/dev/null 2>&1; then
+        return
+    fi
+
+    if [[ "$(id -u)" -eq 0 ]]; then
+        apt-get update
+        apt-get install -y ca-certificates curl
+    elif command -v sudo >/dev/null 2>&1; then
+        sudo apt-get update
+        sudo apt-get install -y ca-certificates curl
+    else
+        printf 'curl is required, and this user cannot install it with apt-get.\n' >&2
+        return 1
+    fi
+}
+
+install_uv() {
+    mkdir -p "$HOME/.local/bin"
+    curl --proto '=https' --tlsv1.2 -LsSf \
+        "https://astral.sh/uv/${uv_version}/install.sh" |
+        env UV_UNMANAGED_INSTALL="$HOME/.local/bin" sh
+}
+
+persist_local_bin() {
+    local profile="$HOME/.bash_profile"
+    local marker="# codaemon orb toolchain"
+
+    touch "$profile"
+    if grep -Fqx "$marker" "$profile"; then
+        return
+    fi
+
+    cat >> "$profile" <<'EOF'
+
+# codaemon orb toolchain
+if [[ -d "$HOME/.local/bin" ]]; then
+    case ":$PATH:" in
+        *":$HOME/.local/bin:"*) ;;
+        *) export PATH="$HOME/.local/bin:$PATH" ;;
+    esac
+fi
+EOF
+}
+
+uv_version="0.11.0"
+uv_bin="$HOME/.local/bin/uv"
+python_version="$(tr -d '[:space:]' < .python-version)"
+
+run_step "Check installer prerequisites" ensure_curl
+
+if [[ ! -x "$uv_bin" ]] || [[ "$("$uv_bin" --version | cut -d' ' -f2)" != "$uv_version" ]]; then
+    run_step "Install uv $uv_version" install_uv
+else
+    printf '\n==> uv %s is already installed\n' "$uv_version"
+fi
+
+export PATH="$HOME/.local/bin:$PATH"
+run_step "Persist the uv path for login shells" persist_local_bin
+run_step "Install Python $python_version" "$uv_bin" python install "$python_version"
+run_step "Install locked project dependencies" "$uv_bin" sync --frozen
+run_step "Apply local SQLite migrations" \
+    env DATABASE_PATH="$repo_root/data/db.sqlite3" \
+    "$uv_bin" run python src/manage.py migrate --noinput
+
+printf '\nOrb setup complete.\n'
