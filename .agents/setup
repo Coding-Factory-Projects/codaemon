@@ -75,6 +75,9 @@ export PATH="$HOME/.local/bin:$PATH"
 run_step "Persist the uv path for login shells" persist_local_bin
 run_step "Install Python $python_version" "$uv_bin" python install "$python_version"
 run_step "Install locked project dependencies" "$uv_bin" sync --frozen
+run_step "Collect static assets" \
+    env DATABASE_PATH="$repo_root/data/db.sqlite3" \
+    "$uv_bin" run python src/manage.py collectstatic --noinput
 run_step "Apply local SQLite migrations" \
     env DATABASE_PATH="$repo_root/data/db.sqlite3" \
     "$uv_bin" run python src/manage.py migrate --noinput
