@@ -8,6 +8,7 @@ env = environ.Env(
     DJANGO_DEBUG=(bool, False),
     DJANGO_ALLOWED_HOSTS=(list, []),
     DJANGO_CSRF_TRUSTED_ORIGINS=(list, []),
+    CODAEMON_TEST_MODE=(bool, False),
     ALLOWED_EMAIL_DOMAINS=(list, ["edu.itescia.fr", "edu.esiee-it.fr"]),
     EMAIL_PORT=(int, 587),
     EMAIL_USE_TLS=(bool, True),
@@ -110,6 +111,15 @@ DISCORD_EVERYONE_ROLE_ID = env("DISCORD_EVERYONE_ROLE_ID", default=DISCORD_GUILD
 LEARND_BASE_URL = env("LEARND_BASE_URL", default="")
 SHARED_SECRET = env("SHARED_SECRET", default="")
 SHARED_SECRET_HEADER = env("SHARED_SECRET_HEADER", default="X-Shared-Secret")
+
+# Explicit local/staging mode: use a student fixture and return onboarding links
+# directly in Discord instead of sending email.
+CODAEMON_TEST_MODE = env("CODAEMON_TEST_MODE")
+LEARND_FIXTURE_PATH = Path(
+    env("LEARND_FIXTURE_PATH", default=str(BASE_DIR.parent / "fixtures" / "students.json"))
+)
+if not LEARND_FIXTURE_PATH.is_absolute():
+    LEARND_FIXTURE_PATH = BASE_DIR.parent / LEARND_FIXTURE_PATH
 
 # Public base URL of this service (used to build the onboarding link).
 WEBSITE_BASE_URL = env("WEBSITE_BASE_URL", default="http://localhost:8000")

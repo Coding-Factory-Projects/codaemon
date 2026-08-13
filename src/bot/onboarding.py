@@ -10,7 +10,7 @@ SALT = "codaemon.onboarding"
 DEFAULT_MAX_AGE = 3600  # 1 hour
 
 
-def make_token(discord_id: str, email: str) -> str:
+def make_token(discord_id: str | int, email: str) -> str:
     return signing.dumps({"discord_id": str(discord_id), "email": email}, salt=SALT)
 
 

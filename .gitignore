@@ -16,3 +16,6 @@ staticfiles/
 .env
 .env.*
 !.env.example
+
+# Private test roster
+fixtures/students.json

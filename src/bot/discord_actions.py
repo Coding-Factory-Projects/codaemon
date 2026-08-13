@@ -19,6 +19,11 @@ API_BASE = "https://discord.com/api/v10"
 VIEW_CHANNEL = 1 << 10  # 1024
 CATEGORY = 4
 CHANNEL_TYPE = {"text": 0, "voice": 2}
+TEST_ROLE_NAMES = ("Admin", "Base", "Guest", "Product Owners")
+
+
+class TestRoleError(Exception):
+    """Test roles are missing or ambiguous."""
 
 
 # --- Routes (all URL construction lives here) ---
@@ -51,11 +56,51 @@ def _member_role_route(user_id: str, role_id: str) -> str:
 # --- Public API ---
 
 
+def setup_test_roles(promotion_names: list[str]) -> dict[str, str]:
+    """Find or create every role required by the test fixture."""
+    names = _test_role_names(promotion_names)
+    with _client() as client:
+        roles = _get_roles(client)
+        role_ids = {}
+
+        for name in names:
+            role = _find_test_role(roles, name)
+            if role is None:
+                role = _create_test_role(client, name)
+                roles.append(role)
+                logger.info("Created test role %s (%s)", name, role["id"])
+            role_ids[name] = str(role["id"])
+
+    settings.DISCORD_ADMIN_ROLE_ID = role_ids["Admin"]
+    settings.DISCORD_BASE_ROLE_ID = role_ids["Base"]
+    settings.DISCORD_GUEST_ROLE_ID = role_ids["Guest"]
+    settings.DISCORD_PRODUCT_OWNERS_ROLE_ID = role_ids["Product Owners"]
+    return role_ids
+
+
+def resolve_test_roles(promotion_names: list[str] | None = None) -> dict[str, str]:
+    """Resolve test roles without creating or modifying anything."""
+    names = _test_role_names(promotion_names or [])
+    with _client() as client:
+        roles = _get_roles(client)
+    role_ids = {}
+    for name in names:
+        role = _find_test_role(roles, name)
+        if role is None:
+            raise TestRoleError(f"Discord role is missing; restart runbot: {name}")
+        role_ids[name] = str(role["id"])
+    return role_ids
+
+
 def create_class_category(name: str, campus: str, existing_role_id: str | None = None) -> str:
     """Idempotently create a class role + private category + channel template.
 
     Returns the (existing or newly created) role id. Called by the learnd webhook.
     """
+    if settings.CODAEMON_TEST_MODE:
+        role_ids = resolve_test_roles()
+        settings.DISCORD_PRODUCT_OWNERS_ROLE_ID = role_ids["Product Owners"]
+
     class_name = _class_name(name, campus)
     with _client() as client:
         role = None
@@ -133,6 +178,41 @@ def _client() -> httpx.Client:
     )
 
 
+def _test_role_names(promotion_names: list[str]) -> list[str]:
+    promotion_roles = {}
+    reserved = {name.casefold() for name in (*TEST_ROLE_NAMES, "@everyone")}
+    for raw_name in promotion_names:
+        name = raw_name.strip()
+        if not name:
+            raise TestRoleError("Promotion role names cannot be empty.")
+        key = name.casefold()
+        if key in reserved:
+            raise TestRoleError(f"Promotion role name is reserved: {name}")
+        existing = promotion_roles.get(key)
+        if existing and existing != name:
+            raise TestRoleError(f"Promotion role names differ only by case: {existing}, {name}")
+        promotion_roles[key] = name
+    return [*TEST_ROLE_NAMES, *promotion_roles.values()]
+
+
+def _get_roles(client: httpx.Client) -> list[dict]:
+    resp = client.get(_roles_route())
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _find_test_role(roles: list[dict], name: str) -> dict | None:
+    matches = [role for role in roles if role["name"] == name]
+    if len(matches) > 1:
+        raise TestRoleError(f"Multiple Discord roles are named {name}.")
+    if not matches:
+        return None
+    role = matches[0]
+    if role.get("managed"):
+        raise TestRoleError(f"Discord role is managed by an integration: {name}")
+    return role
+
+
 def _class_name(name: str, campus: str) -> str:
     return f"{name} - {campus}"
 
@@ -168,6 +248,15 @@ def _find_category(client: httpx.Client, name: str) -> dict | None:
 
 def _create_role(client: httpx.Client, name: str) -> dict:
     resp = client.post(_roles_route(), json={"name": name, "hoist": True, "mentionable": True})
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _create_test_role(client: httpx.Client, name: str) -> dict:
+    resp = client.post(
+        _roles_route(),
+        json={"name": name, "permissions": "0", "hoist": False, "mentionable": False},
+    )
     resp.raise_for_status()
     return resp.json()
 

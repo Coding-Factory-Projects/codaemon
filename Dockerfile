@@ -16,6 +16,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 COPY src/ ./src/
 COPY assets/ ./assets/
+COPY fixtures/ ./fixtures/
 
 ENV PATH="/app/.venv/bin:$PATH"
 WORKDIR /app/src

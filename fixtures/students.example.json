@@ -1,0 +1,77 @@
+{
+  "ada.lovelace.test@edu.esiee-it.fr": {
+    "firstName": "Ada",
+    "lastName": "Lovelace",
+    "promotion": {"discord_role_name": "B1 Cergy"}
+  },
+  "rob.pike.test@edu.esiee-it.fr": {
+    "firstName": "Rob",
+    "lastName": "Pike",
+    "promotion": {"discord_role_name": "B1 Cergy"}
+  },
+  "grace.hopper.test@edu.esiee-it.fr": {
+    "firstName": "Grace",
+    "lastName": "Hopper",
+    "promotion": {"discord_role_name": "B1 Cergy"}
+  },
+  "null.pointer.test@edu.esiee-it.fr": {
+    "firstName": "Null",
+    "lastName": "Pointer",
+    "promotion": {"discord_role_name": "B1 Cergy"}
+  },
+  "rubber.duck.test@edu.esiee-it.fr": {
+    "firstName": "Rubber",
+    "lastName": "Duck",
+    "promotion": {"discord_role_name": "B1 Cergy"}
+  },
+  "margaret.hamilton.test@edu.esiee-it.fr": {
+    "firstName": "Margaret",
+    "lastName": "Hamilton",
+    "promotion": {"discord_role_name": "B1 Paris"}
+  },
+  "linus.torvalds.test@edu.esiee-it.fr": {
+    "firstName": "Linus",
+    "lastName": "Torvalds",
+    "promotion": {"discord_role_name": "B1 Paris"}
+  },
+  "git.rebase.test@edu.esiee-it.fr": {
+    "firstName": "Git",
+    "lastName": "Rebase",
+    "promotion": {"discord_role_name": "B1 Paris"}
+  },
+  "merge.conflict.test@edu.esiee-it.fr": {
+    "firstName": "Merge",
+    "lastName": "Conflict",
+    "promotion": {"discord_role_name": "B1 Paris"}
+  },
+  "cache.miss.test@edu.esiee-it.fr": {
+    "firstName": "Cache",
+    "lastName": "Miss",
+    "promotion": {"discord_role_name": "B1 Paris"}
+  },
+  "alan.turing.test@edu.esiee-it.fr": {
+    "firstName": "Alan",
+    "lastName": "Turing",
+    "promotion": {"discord_role_name": "Lead Dev Cergy"}
+  },
+  "barbara.liskov.test@edu.esiee-it.fr": {
+    "firstName": "Barbara",
+    "lastName": "Liskov",
+    "promotion": {"discord_role_name": "Lead Dev Cergy"}
+  },
+  "stack.overflow.test@edu.esiee-it.fr": {
+    "firstName": "Stack",
+    "lastName": "Overflow",
+    "promotion": {"discord_role_name": "Lead Dev Cergy"}
+  },
+  "seg.fault.test@edu.esiee-it.fr": {
+    "firstName": "Seg",
+    "lastName": "Fault",
+    "promotion": {"discord_role_name": "Lead Dev Cergy"}
+  },
+  "test.mctestface@edu.esiee-it.fr": {
+    "firstName": "Test",
+    "lastName": "McTestface",
+    "promotion": {"discord_role_name": "Lead Dev Cergy"}
+  }
+}

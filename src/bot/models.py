@@ -4,6 +4,8 @@ from django.db import models
 class OnboardingLog(models.Model):
     """Audit trail of student onboardings. codaemon stores no roster -- only this log."""
 
+    objects = models.Manager()
+
     discord_user_id = models.CharField(max_length=50)
     email = models.EmailField()
     nickname = models.CharField(max_length=100, blank=True)
