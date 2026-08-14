@@ -32,7 +32,7 @@ def test_webhook_rejects_without_secret(client):
 
 
 def test_webhook_accepts_with_secret(client, monkeypatch):
-    monkeypatch.setattr(discord_actions, "create_class_category", lambda *a, **k: "555")
+    monkeypatch.setattr(discord_actions, "create_class_category", lambda *a, **k: ("555", "777"))
     r = _post(
         client,
         "/on-promotion-created",
@@ -40,7 +40,7 @@ def test_webhook_accepts_with_secret(client, monkeypatch):
         HTTP_X_SHARED_SECRET="topsecret",
     )
     assert r.status_code == 200
-    assert r.json() == {"roleId": "555"}
+    assert r.json() == {"roleId": "555", "categoryId": "777"}
 
 
 # --- /onboard (signed token, server-side Django view) ---
@@ -108,10 +108,12 @@ def test_create_class_category_is_idempotent(monkeypatch):
     created = []
     monkeypatch.setattr(discord_actions, "_create_role", lambda *a: created.append("role"))
     monkeypatch.setattr(discord_actions, "_create_category", lambda *a: created.append("cat"))
+    monkeypatch.setattr(discord_actions, "_ensure_channels", lambda c, pid: None)
 
-    role_id = discord_actions.create_class_category("M1", "paris")
+    role_id, category_id = discord_actions.create_class_category("M1", "paris")
 
     assert role_id == "999"
+    assert category_id == "888"
     assert created == []  # nothing re-created
 
 
@@ -121,8 +123,9 @@ def test_create_class_category_creates_when_absent(monkeypatch):
     monkeypatch.setattr(discord_actions, "_find_category", lambda c, name: None)
     monkeypatch.setattr(discord_actions, "_create_role", lambda c, name: {"id": "111"})
     monkeypatch.setattr(discord_actions, "_create_category", lambda c, name, rid: {"id": "222"})
-    monkeypatch.setattr(discord_actions, "_create_channels", lambda c, pid: None)
+    monkeypatch.setattr(discord_actions, "_ensure_channels", lambda c, pid: None)
 
-    role_id = discord_actions.create_class_category("M2", "cergy")
+    role_id, category_id = discord_actions.create_class_category("M2", "cergy")
 
     assert role_id == "111"
+    assert category_id == "222"

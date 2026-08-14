@@ -15,7 +15,8 @@ Two processes from one image (Design A):
   web (gunicorn / WSGI)        runbot (discord.py gateway)
   - /on-promotion-created      - /createcategory  (admin)
   - /onboard (confirm page)    - /deletecategory  (admin)
-  - /healthz                   - /onboard         (students)
+  - /healthz                   - /rollover        (admin)
+                               - /onboard         (students)
         \__ both call bot/discord_actions.py (Discord REST) __/
 ```
 
@@ -139,8 +140,75 @@ Make the GHCR package public so the server pulls without credentials.
 
 ## learnd contract
 
-- learnd → codaemon: `POST /on-promotion-created {name, campus}` (+ `X-Shared-Secret`) → `{roleId}`
+- learnd → codaemon: `POST /on-promotion-created {name, campus}` (+ `X-Shared-Secret`)
+  → `{roleId, categoryId}`
 - codaemon → learnd: `PATCH /promotions/students {email, discord_id}` (+ `X-Shared-Secret`)
   → `{firstName, lastName, promotion: {discord_role_id}}`
 
 The shared secret is required in **both** directions from day one.
+
+### Academic-year rollover support required in LearnD
+
+`SchoolClass` must store the Discord category alongside its existing role:
+
+```python
+discord_category_id = models.CharField(
+    _("discord category id"),
+    max_length=255,
+    blank=True,
+)
+```
+
+When LearnD handles `/on-promotion-created`, it must persist both `roleId` and
+`categoryId` on the class.
+
+LearnD must expose these shared-secret-protected endpoints to codaemon:
+
+```http
+GET /discord/rollover
+```
+
+```json
+{
+  "active_year": {
+    "start_year": 2026,
+    "school_classes": [
+      {
+        "id": "class-1",
+        "name": "B1",
+        "campus": "Paris",
+        "discord_role_id": "123",
+        "discord_category_id": "456"
+      }
+    ]
+  },
+  "archived_years": [
+    {
+      "start_year": 2025,
+      "school_classes": []
+    }
+  ]
+}
+```
+
+`archived_years` must contain every archived year, newest or oldest first; the
+bot sorts them by `start_year`. Empty Discord IDs are valid for resources that
+have not been provisioned yet. Campus is its display name, not its ID.
+
+```http
+PATCH /discord/school-classes/{id}
+```
+
+```json
+{
+  "discord_role_id": "123",
+  "discord_category_id": "456"
+}
+```
+
+The admin-only `/rollover` command queries these endpoints. It keeps and renames
+the newest archived year using the suffix `· arch. 25-26`, deletes categories,
+child channels, and roles for every older archived year, then idempotently
+creates or completes the active year's Discord resources. Run it first with
+`dry_run:true`; `dry_run:false` applies the plan and updates its ephemeral
+response with progress for each class.

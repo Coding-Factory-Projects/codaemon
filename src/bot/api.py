@@ -37,11 +37,12 @@ class PromotionCreatedIn(Schema):
 
 class PromotionCreatedOut(Schema):
     roleId: str
+    categoryId: str
 
 
 @api.post("/on-promotion-created", response=PromotionCreatedOut, auth=shared_secret)
 def on_promotion_created(request, payload: PromotionCreatedIn):
-    role_id = discord_actions.create_class_category(
+    role_id, category_id = discord_actions.create_class_category(
         payload.name, payload.campus, payload.discord_role_id
     )
-    return {"roleId": role_id}
+    return {"roleId": role_id, "categoryId": category_id}

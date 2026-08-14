@@ -7,6 +7,7 @@ Layout: constants and routes first, then the public API, then HTTP internals.
 """
 
 import logging
+import time
 
 import httpx
 from django.conf import settings
@@ -35,6 +36,10 @@ def _guild() -> str:
 
 def _roles_route() -> str:
     return f"/guilds/{_guild()}/roles"
+
+
+def _role_route(role_id: str) -> str:
+    return f"/guilds/{_guild()}/roles/{role_id}"
 
 
 def _channels_route() -> str:
@@ -92,10 +97,12 @@ def resolve_test_roles(promotion_names: list[str] | None = None) -> dict[str, st
     return role_ids
 
 
-def create_class_category(name: str, campus: str, existing_role_id: str | None = None) -> str:
+def create_class_category(
+    name: str, campus: str, existing_role_id: str | None = None
+) -> tuple[str, str]:
     """Idempotently create a class role + private category + channel template.
 
-    Returns the (existing or newly created) role id. Called by the learnd webhook.
+    Returns the role and category ids. Called by the learnd webhook.
     """
     if settings.CODAEMON_TEST_MODE:
         role_ids = resolve_test_roles()
@@ -115,12 +122,85 @@ def create_class_category(name: str, campus: str, existing_role_id: str | None =
         category = _find_category(client, class_name)
         if category is None:
             category = _create_category(client, class_name, role["id"])
-            _create_channels(client, category["id"])
             logger.info("Created category and channels for %s", class_name)
         else:
             logger.info("Category %s already exists, skipping creation", class_name)
+        _ensure_channels(client, category["id"])
 
-        return role["id"]
+        return role["id"], category["id"]
+
+
+def reconcile_class_category(
+    name: str,
+    campus: str,
+    role_id: str,
+    category_id: str,
+) -> tuple[str, str]:
+    """Create or complete the active Discord resources for one learnd class."""
+    class_name = _class_name(name, campus)
+    with _client() as client:
+        role = _find_role_by_id(client, role_id) if role_id else None
+        if role is None:
+            role = _find_role(client, class_name)
+        if role is None:
+            role = _create_role(client, class_name)
+
+        category = _find_category_by_id(client, category_id) if category_id else None
+        if category is None:
+            category = _find_category(client, class_name)
+        if category is None:
+            category = _create_category(client, class_name, role["id"])
+        _ensure_channels(client, category["id"])
+        return role["id"], category["id"]
+
+
+def archive_class_resources(
+    name: str,
+    campus: str,
+    start_year: int,
+    role_id: str,
+    category_id: str,
+) -> None:
+    """Give one retained class role and category their archived name."""
+    class_name = _class_name(name, campus)
+    archived_name = _archived_class_name(name, campus, start_year)
+    with _client() as client:
+        role = _find_role_by_id(client, role_id) if role_id else None
+        if role is None:
+            role = _find_role(client, class_name)
+        if role is not None and role["name"] != archived_name:
+            _request(client, "PATCH", _role_route(role["id"]), {"name": archived_name})
+
+        category = _find_category_by_id(client, category_id) if category_id else None
+        if category is None:
+            category = _find_category(client, class_name)
+        if category is not None and category["name"] != archived_name:
+            _request(client, "PATCH", _channel_route(category["id"]), {"name": archived_name})
+
+
+def delete_class_resources(
+    name: str,
+    campus: str,
+    start_year: int,
+    role_id: str,
+    category_id: str,
+) -> None:
+    """Delete one old class category, all its channels, and its role."""
+    archived_name = _archived_class_name(name, campus, start_year)
+    with _client() as client:
+        category = _find_category_by_id(client, category_id) if category_id else None
+        if category is None and role_id:
+            category = _find_category_by_role_id(client, role_id)
+        if category is None:
+            category = _find_category(client, archived_name)
+        if category is not None:
+            _delete_category(client, category["id"])
+
+        role = _find_role_by_id(client, role_id) if role_id else None
+        if role is None:
+            role = _find_role(client, archived_name)
+        if role is not None:
+            _request(client, "DELETE", _role_route(role["id"]))
 
 
 def create_category(name: str) -> str:
@@ -132,21 +212,15 @@ def create_category(name: str) -> str:
         category = _find_category(client, name)
         if category is None:
             category = _create_category(client, name, role_id=None)
-            _create_channels(client, category["id"])
             logger.info("Created category %s", name)
+        _ensure_channels(client, category["id"])
         return category["id"]
 
 
 def delete_category(category_id: str) -> None:
     """Delete a category and every channel it contains."""
     with _client() as client:
-        resp = client.get(_channels_route())
-        resp.raise_for_status()
-        children = [c for c in resp.json() if c.get("parent_id") == str(category_id)]
-        for child in children:
-            client.delete(_channel_route(child["id"])).raise_for_status()
-        client.delete(_channel_route(category_id)).raise_for_status()
-        logger.info("Deleted category %s (%d channels)", category_id, len(children))
+        _delete_category(client, category_id)
 
 
 def apply_onboarding(
@@ -157,13 +231,13 @@ def apply_onboarding(
 ) -> None:
     """Set a member's nickname, add roles, and remove roles (onboarding)."""
     with _client() as client:
-        client.patch(_member_route(user_id), json={"nick": nickname}).raise_for_status()
+        _request(client, "PATCH", _member_route(user_id), {"nick": nickname})
         for role_id in add_role_ids:
             if role_id:
-                client.put(_member_role_route(user_id, role_id)).raise_for_status()
+                _request(client, "PUT", _member_role_route(user_id, role_id))
         for role_id in remove_role_ids:
             if role_id:
-                client.delete(_member_role_route(user_id, role_id)).raise_for_status()
+                _request(client, "DELETE", _member_role_route(user_id, role_id))
         logger.info("Applied onboarding for member %s (%s)", user_id, nickname)
 
 
@@ -196,9 +270,7 @@ def _test_role_names(promotion_names: list[str]) -> list[str]:
 
 
 def _get_roles(client: httpx.Client) -> list[dict]:
-    resp = client.get(_roles_route())
-    resp.raise_for_status()
-    return resp.json()
+    return _request(client, "GET", _roles_route()).json()
 
 
 def _find_test_role(roles: list[dict], name: str) -> dict | None:
@@ -217,6 +289,12 @@ def _class_name(name: str, campus: str) -> str:
     return f"{name} - {campus}"
 
 
+def _archived_class_name(name: str, campus: str, start_year: int) -> str:
+    return (
+        f"{_class_name(name, campus)} · arch. {start_year % 100:02d}-{(start_year + 1) % 100:02d}"
+    )
+
+
 def _category_overwrites(role_id: str | None) -> list[dict]:
     overwrites = [
         # Deny @everyone (its id == the guild id) so the class area is private.
@@ -229,59 +307,129 @@ def _category_overwrites(role_id: str | None) -> list[dict]:
 
 
 def _find_role(client: httpx.Client, name: str) -> dict | None:
-    resp = client.get(_roles_route())
-    resp.raise_for_status()
-    return next((r for r in resp.json() if r["name"] == name), None)
+    return next((role for role in _get_roles(client) if role["name"] == name), None)
 
 
 def _find_role_by_id(client: httpx.Client, role_id: str) -> dict | None:
-    resp = client.get(_roles_route())
-    resp.raise_for_status()
-    return next((r for r in resp.json() if r["id"] == str(role_id)), None)
+    return next((role for role in _get_roles(client) if role["id"] == str(role_id)), None)
 
 
 def _find_category(client: httpx.Client, name: str) -> dict | None:
-    resp = client.get(_channels_route())
-    resp.raise_for_status()
-    return next((c for c in resp.json() if c["type"] == CATEGORY and c["name"] == name), None)
+    channels = _request(client, "GET", _channels_route()).json()
+    return next(
+        (
+            channel
+            for channel in channels
+            if channel["type"] == CATEGORY and channel["name"] == name
+        ),
+        None,
+    )
+
+
+def _find_category_by_id(client: httpx.Client, category_id: str) -> dict | None:
+    channels = _request(client, "GET", _channels_route()).json()
+    return next(
+        (
+            channel
+            for channel in channels
+            if channel["type"] == CATEGORY and channel["id"] == str(category_id)
+        ),
+        None,
+    )
+
+
+def _find_category_by_role_id(client: httpx.Client, role_id: str) -> dict | None:
+    channels = _request(client, "GET", _channels_route()).json()
+    return next(
+        (
+            channel
+            for channel in channels
+            if channel["type"] == CATEGORY
+            and any(
+                str(overwrite.get("id")) == str(role_id)
+                for overwrite in channel.get("permission_overwrites", [])
+            )
+        ),
+        None,
+    )
 
 
 def _create_role(client: httpx.Client, name: str) -> dict:
-    resp = client.post(_roles_route(), json={"name": name, "hoist": True, "mentionable": True})
-    resp.raise_for_status()
-    return resp.json()
+    return _request(
+        client,
+        "POST",
+        _roles_route(),
+        {"name": name, "hoist": True, "mentionable": True},
+    ).json()
 
 
 def _create_test_role(client: httpx.Client, name: str) -> dict:
-    resp = client.post(
+    return _request(
+        client,
+        "POST",
         _roles_route(),
-        json={"name": name, "permissions": "0", "hoist": False, "mentionable": False},
-    )
-    resp.raise_for_status()
-    return resp.json()
+        {"name": name, "permissions": "0", "hoist": False, "mentionable": False},
+    ).json()
 
 
 def _create_category(client: httpx.Client, name: str, role_id: str | None) -> dict:
-    resp = client.post(
+    return _request(
+        client,
+        "POST",
         _channels_route(),
-        json={
+        {
             "name": name,
             "type": CATEGORY,
             "permission_overwrites": _category_overwrites(role_id),
         },
-    )
-    resp.raise_for_status()
-    return resp.json()
+    ).json()
 
 
-def _create_channels(client: httpx.Client, parent_id: str) -> None:
+def _ensure_channels(client: httpx.Client, parent_id: str) -> None:
+    existing_channels = _request(client, "GET", _channels_route()).json()
     for channel in CHANNEL_TEMPLATE:
-        resp = client.post(
+        channel_type = CHANNEL_TYPE[channel["type"]]
+        exists = any(
+            existing.get("parent_id") == str(parent_id)
+            and existing["name"] == channel["name"]
+            and existing["type"] == channel_type
+            for existing in existing_channels
+        )
+        if exists:
+            continue
+        _request(
+            client,
+            "POST",
             _channels_route(),
-            json={
+            {
                 "name": channel["name"],
-                "type": CHANNEL_TYPE[channel["type"]],
+                "type": channel_type,
                 "parent_id": parent_id,
             },
         )
-        resp.raise_for_status()
+
+
+def _delete_category(client: httpx.Client, category_id: str) -> None:
+    channels = _request(client, "GET", _channels_route()).json()
+    children = [channel for channel in channels if channel.get("parent_id") == str(category_id)]
+    for child in children:
+        _request(client, "DELETE", _channel_route(child["id"]))
+    _request(client, "DELETE", _channel_route(category_id))
+    logger.info("Deleted category %s (%d channels)", category_id, len(children))
+
+
+def _request(
+    client: httpx.Client,
+    method: str,
+    route: str,
+    payload: dict | None = None,
+) -> httpx.Response:
+    for _attempt in range(5):
+        response = client.request(method, route, json=payload)
+        if response.status_code != 429:
+            response.raise_for_status()
+            return response
+        retry_after = float(response.json().get("retry_after", 1))
+        time.sleep(retry_after)
+    response.raise_for_status()
+    return response

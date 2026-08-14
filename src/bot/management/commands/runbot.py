@@ -7,7 +7,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from bot import discord_actions, learnd
-from bot.commands import categories, onboard
+from bot.commands import categories, onboard, rollover
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +48,7 @@ class Command(BaseCommand):
 
         categories.register(tree, guild)
         onboard.register(tree, guild)
+        rollover.register(tree, guild)
 
         @client.event
         async def on_ready():

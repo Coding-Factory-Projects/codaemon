@@ -2,6 +2,7 @@
 
 import json
 import logging
+from typing import TypedDict
 
 import httpx
 from django.conf import settings
@@ -15,6 +16,24 @@ class LearndError(Exception):
 
 class StudentNotFound(LearndError):
     """No student matches the supplied email address."""
+
+
+class RolloverClass(TypedDict):
+    id: str
+    name: str
+    campus: str
+    discord_role_id: str
+    discord_category_id: str
+
+
+class RolloverYear(TypedDict):
+    start_year: int
+    school_classes: list[RolloverClass]
+
+
+class RolloverData(TypedDict):
+    active_year: RolloverYear
+    archived_years: list[RolloverYear]
 
 
 def patch_student(email: str, discord_id: str) -> dict:
@@ -46,6 +65,46 @@ def patch_student(email: str, discord_id: str) -> dict:
     return _validate_student(student, "discord_role_id")
 
 
+def fetch_rollover() -> RolloverData:
+    """Fetch the active and archived school years used by the rollover command."""
+    url = f"{settings.LEARND_BASE_URL.rstrip('/')}/discord/rollover"
+    try:
+        response = httpx.get(
+            url,
+            headers={settings.SHARED_SECRET_HEADER: settings.SHARED_SECRET},
+            timeout=30,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        raise LearndError("learnd rollover request failed") from exc
+    if not isinstance(payload, dict):
+        raise LearndError("learnd rollover response must be an object")
+    active_year = _validate_rollover_year(payload.get("active_year"))
+    archived = payload.get("archived_years")
+    if not isinstance(archived, list):
+        raise LearndError("learnd rollover response is missing archived_years")
+    return {
+        "active_year": active_year,
+        "archived_years": [_validate_rollover_year(year) for year in archived],
+    }
+
+
+def patch_school_class_discord_ids(school_class_id: str, role_id: str, category_id: str) -> None:
+    """Persist Discord resource ids after rollover provisioning."""
+    url = f"{settings.LEARND_BASE_URL.rstrip('/')}/discord/school-classes/{school_class_id}"
+    try:
+        response = httpx.patch(
+            url,
+            json={"discord_role_id": role_id, "discord_category_id": category_id},
+            headers={settings.SHARED_SECRET_HEADER: settings.SHARED_SECRET},
+            timeout=30,
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise LearndError("learnd class update failed") from exc
+
+
 def fixture_promotion_names() -> list[str]:
     """Return every promotion role name declared by the test fixture."""
     return [
@@ -71,6 +130,54 @@ def _fixture_student(email: str, discord_id: str) -> dict:
 
     logger.info("Fixture matched %s to Discord member %s", email, discord_id)
     return _validate_student(student, "discord_role_name")
+
+
+def _validate_rollover_year(value: object) -> RolloverYear:
+    if not isinstance(value, dict):
+        raise LearndError("learnd rollover response contains an invalid year")
+    start_year = value.get("start_year")
+    school_classes = value.get("school_classes")
+    if not isinstance(start_year, int):
+        raise LearndError("learnd rollover year is missing start_year")
+    if not isinstance(school_classes, list):
+        raise LearndError("learnd rollover year is missing school_classes")
+    return {
+        "start_year": start_year,
+        "school_classes": [_validate_rollover_class(item) for item in school_classes],
+    }
+
+
+def _validate_rollover_class(value: object) -> RolloverClass:
+    if not isinstance(value, dict):
+        raise LearndError("learnd rollover response contains an invalid class")
+    school_class_id = value.get("id")
+    name = value.get("name")
+    campus = value.get("campus")
+    role_id = value.get("discord_role_id")
+    category_id = value.get("discord_category_id")
+    if not isinstance(school_class_id, str):
+        raise LearndError("learnd rollover class is missing id")
+    if not isinstance(name, str):
+        raise LearndError("learnd rollover class is missing name")
+    if not isinstance(campus, str):
+        raise LearndError("learnd rollover class is missing campus")
+    if not isinstance(role_id, str):
+        raise LearndError("learnd rollover class is missing discord_role_id")
+    if not isinstance(category_id, str):
+        raise LearndError("learnd rollover class is missing discord_category_id")
+    if not school_class_id.strip():
+        raise LearndError("learnd rollover class contains empty required fields")
+    if not name.strip():
+        raise LearndError("learnd rollover class contains empty required fields")
+    if not campus.strip():
+        raise LearndError("learnd rollover class contains empty required fields")
+    return {
+        "id": school_class_id.strip(),
+        "name": name.strip(),
+        "campus": campus.strip(),
+        "discord_role_id": role_id.strip(),
+        "discord_category_id": category_id.strip(),
+    }
 
 
 def _read_fixture() -> dict[str, object]:
