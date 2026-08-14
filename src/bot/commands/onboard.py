@@ -2,11 +2,12 @@ import asyncio
 import logging
 
 import discord
+import httpx
 from discord import app_commands
 from django.conf import settings
 from django.utils.translation import gettext as _
 
-from bot import mail
+from bot import discord_actions, learnd, mail
 from bot.commands import has_any_role
 from bot.onboarding import make_token
 
@@ -61,4 +62,38 @@ def register(tree: app_commands.CommandTree, guild: discord.Object) -> None:
 
         await interaction.followup.send(
             _("Un email a été envoyé pour confirmer ton inscription."), ephemeral=True
+        )
+
+    if not settings.CODAEMON_TEST_MODE:
+        return
+
+    @tree.command(
+        name="resetmember",
+        description=_("Réinitialise un membre pour tester à nouveau son inscription"),
+        guild=guild,
+    )
+    @app_commands.describe(member=_("Le membre à réinitialiser"))
+    async def resetmember(interaction: discord.Interaction, member: discord.Member) -> None:
+        if not has_any_role(interaction, settings.DISCORD_ADMIN_ROLE_ID):
+            await interaction.response.send_message(NO_PERMISSION, ephemeral=True)
+            return
+
+        await interaction.response.defer(thinking=True, ephemeral=True)
+        try:
+            promotion_names = learnd.fixture_promotion_names()
+            await asyncio.to_thread(
+                discord_actions.reset_test_member,
+                str(member.id),
+                promotion_names,
+            )
+        except (discord_actions.TestRoleError, learnd.LearndError, httpx.HTTPError):
+            logger.exception("resetmember failed")
+            await interaction.followup.send(
+                _("Le membre n'a pas pu être réinitialisé."), ephemeral=True
+            )
+            return
+
+        await interaction.followup.send(
+            _("{member} peut recommencer son inscription.").format(member=member.mention),
+            ephemeral=True,
         )
