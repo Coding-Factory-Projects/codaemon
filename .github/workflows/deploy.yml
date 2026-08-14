@@ -9,14 +9,10 @@ env:
   IMAGE: ghcr.io/coding-factory-projects/codaemon
 
 jobs:
-  build:
+  checks:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
-    outputs:
-      image_tag: ${{ github.sha }}
-      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -28,6 +24,17 @@ jobs:
           make lint
           make check
           uv run pytest
+
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_tag: ${{ github.sha }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
       - name: Compute version
         id: version
         run: |
@@ -53,7 +60,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   deploy-int:
-    needs: build
+    needs: [checks, build]
     uses: ./.github/workflows/deploy-environment.yml
     secrets: inherit
     with:

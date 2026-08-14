@@ -63,9 +63,9 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           fingerprint: ${{ secrets.SSH_FINGERPRINT }}
           script: |
+            set -e
             cd ${{ inputs.deploy_path }}
-            docker compose pull
-            docker compose up -d --remove-orphans
+            docker compose up -d --pull always --remove-orphans
             docker image ls ${{ env.IMAGE }} --format '{{.Repository}}:{{.Tag}}' \
               | grep -v ':${{ inputs.image_tag }}$' \
               | grep -v ':${{ inputs.version }}$' \
