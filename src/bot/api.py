@@ -10,7 +10,7 @@ from django.conf import settings
 from django.utils.crypto import constant_time_compare
 from ninja import NinjaAPI, Schema
 
-from bot import discord_actions
+from bot.discord_api import categories as discord_categories
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ class PromotionCreatedOut(Schema):
 
 @api.post("/on-promotion-created", response=PromotionCreatedOut, auth=shared_secret)
 def on_promotion_created(request, payload: PromotionCreatedIn):
-    role_id, category_id = discord_actions.create_class_category(
+    role_id, category_id = discord_categories.create_class_category(
         payload.name, payload.campus, payload.discord_role_id
     )
     return {"roleId": role_id, "categoryId": category_id}

@@ -6,8 +6,8 @@ from discord import app_commands
 from django.conf import settings
 from django.utils.translation import gettext as _
 
-from bot import rollover as rollover_service
-from bot.commands import has_any_role
+from bot.slash_commands.permissions import has_any_role
+from bot.usecases import rollover as rollover_usecase
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ def register(tree: app_commands.CommandTree, guild: discord.Object) -> None:
                 logger.warning("could not update rollover progress", exc_info=True)
 
         try:
-            result = await asyncio.to_thread(rollover_service.run, dry_run, report_progress)
+            result = await asyncio.to_thread(rollover_usecase.run, dry_run, report_progress)
         except Exception:
             logger.exception("rollover failed")
             await interaction.edit_original_response(

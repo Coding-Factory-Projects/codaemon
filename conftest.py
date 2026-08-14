@@ -12,6 +12,7 @@ def _test_settings(settings):
     settings.LEARND_SHARED_SECRET = "topsecret"
     settings.SHARED_SECRET_HEADER = "X-Shared-Secret"
     settings.ALLOWED_EMAIL_DOMAINS = ["edu.esiee-it.fr"]
+    settings.CODAEMON_TEST_MODE = False
     settings.DISCORD_GUILD_ID = "1"
     settings.DISCORD_BASE_ROLE_ID = "10"
     settings.DISCORD_GUEST_ROLE_ID = "20"

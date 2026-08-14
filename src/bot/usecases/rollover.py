@@ -4,8 +4,8 @@ from collections.abc import Callable
 
 from django.utils.translation import gettext as _
 
-from bot import discord_actions, learnd
-from bot.channels import CHANNEL_TEMPLATE
+from bot import learnd
+from bot.discord_api import categories as discord_categories
 
 
 def run(dry_run: bool, progress: Callable[[str], None] | None = None) -> str:
@@ -33,7 +33,7 @@ def run(dry_run: bool, progress: Callable[[str], None] | None = None) -> str:
                     campus=school_class["campus"],
                 ),
             )
-            discord_actions.archive_class_resources(
+            discord_categories.archive_class_resources(
                 school_class["name"],
                 school_class["campus"],
                 retained_year["start_year"],
@@ -56,7 +56,7 @@ def run(dry_run: bool, progress: Callable[[str], None] | None = None) -> str:
                 campus=school_class["campus"],
             ),
         )
-        discord_actions.delete_class_resources(
+        discord_categories.delete_class_resources(
             school_class["name"],
             school_class["campus"],
             start_year,
@@ -75,7 +75,7 @@ def run(dry_run: bool, progress: Callable[[str], None] | None = None) -> str:
                 campus=school_class["campus"],
             ),
         )
-        role_id, category_id = discord_actions.reconcile_class_category(
+        role_id, category_id = discord_categories.reconcile_class_category(
             school_class["name"],
             school_class["campus"],
             school_class["discord_role_id"],
@@ -107,7 +107,7 @@ def _format_plan(
 ) -> str:
     retained_count = len(retained_year["school_classes"]) if retained_year else 0
     purged_count = sum(len(year["school_classes"]) for year in purged_years)
-    removed_channels = purged_count * (len(CHANNEL_TEMPLATE) + 1)
+    removed_channels = purged_count * (len(discord_categories.CHANNEL_TEMPLATE) + 1)
     purge_labels = ", ".join(_year_label(year["start_year"]) for year in purged_years)
     if not purge_labels:
         purge_labels = _("aucune")

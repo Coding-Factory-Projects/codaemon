@@ -4,7 +4,7 @@ from django.conf import settings
 from django.core.mail import send_mail
 
 
-def send_onboarding_email(to_email: str, link: str) -> None:
+def send_onboard_email(to_email: str, link: str) -> None:
     send_mail(
         subject="Inscription au serveur de la Coding Factory",
         message=(

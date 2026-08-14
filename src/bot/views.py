@@ -1,13 +1,13 @@
 from django.conf import settings
-from django.http import HttpRequest, JsonResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 
-from bot.services import OnboardingError, onboard_student
+from bot.usecases.onboard import OnboardError, complete_onboard
 
 
 @csrf_exempt
-def onboarding(request):
+def onboard(request: HttpRequest) -> HttpResponse:
     """Public onboarding page.
 
     GET  /onboard?token=...  -> a confirmation page with a single button.
@@ -19,14 +19,14 @@ def onboarding(request):
     """
     if request.method == "POST":
         try:
-            nickname = onboard_student(request.POST.get("token", ""))
-        except OnboardingError as exc:
-            return render(request, "bot/onboarding.html", {"state": "error", "message": str(exc)})
-        return render(request, "bot/onboarding.html", {"state": "success", "nickname": nickname})
+            nickname = complete_onboard(request.POST.get("token", ""))
+        except OnboardError as exc:
+            return render(request, "onboard.html", {"state": "error", "message": str(exc)})
+        return render(request, "onboard.html", {"state": "success", "nickname": nickname})
 
     return render(
         request,
-        "bot/onboarding.html",
+        "onboard.html",
         {"state": "confirm", "token": request.GET.get("token", "")},
     )
 

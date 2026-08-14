@@ -6,8 +6,9 @@ from discord import app_commands
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from bot import discord_actions, learnd
-from bot.commands import categories, onboard, rollover
+from bot import learnd
+from bot.discord_api import testing_roles
+from bot.slash_commands import categories, onboard, rollover
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +24,8 @@ class Command(BaseCommand):
         if settings.CODAEMON_TEST_MODE:
             try:
                 promotion_names = learnd.fixture_promotion_names()
-                roles = discord_actions.setup_test_roles(promotion_names)
-            except (discord_actions.TestRoleError, learnd.LearndError, httpx.HTTPError) as exc:
+                roles = testing_roles.setup_testing_roles(promotion_names)
+            except (testing_roles.TestRoleError, learnd.LearndError, httpx.HTTPError) as exc:
                 raise CommandError(f"Test setup failed: {exc}") from exc
             role_summary = ", ".join(f"{name}={role_id}" for name, role_id in roles.items())
             self.stdout.write(self.style.WARNING(f"TEST MODE enabled. Roles: {role_summary}"))

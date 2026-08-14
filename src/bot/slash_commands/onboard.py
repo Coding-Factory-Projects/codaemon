@@ -7,9 +7,10 @@ from discord import app_commands
 from django.conf import settings
 from django.utils.translation import gettext as _
 
-from bot import discord_actions, learnd, mail
-from bot.commands import has_any_role
-from bot.onboarding import make_token
+from bot import learnd
+from bot.discord_api import members, testing_roles
+from bot.slash_commands.permissions import has_any_role
+from bot.usecases.onboard import OnboardError, request_onboard
 
 logger = logging.getLogger(__name__)
 
@@ -30,33 +31,17 @@ def register(tree: app_commands.CommandTree, guild: discord.Object) -> None:
             await interaction.response.send_message(NO_PERMISSION, ephemeral=True)
             return
 
-        mail_etudiant = mail_etudiant.strip().casefold()
-        domain = mail_etudiant.split("@")[-1]
-        if domain not in settings.ALLOWED_EMAIL_DOMAINS:
-            allowed = " ou ".join(settings.ALLOWED_EMAIL_DOMAINS)
-            await interaction.response.send_message(
-                _("Vous devez utiliser un email {allowed} !").format(allowed=allowed),
-                ephemeral=True,
-            )
-            return
-
-        token = make_token(interaction.user.id, mail_etudiant)
-        link = f"{settings.WEBSITE_BASE_URL.rstrip('/')}/onboard?token={token}"
-
-        if settings.CODAEMON_TEST_MODE:
-            await interaction.response.send_message(
-                _("Mode test — [confirmer l'inscription]({link})").format(link=link),
-                ephemeral=True,
-            )
-            return
-
         await interaction.response.defer(thinking=True, ephemeral=True)
         try:
-            await asyncio.to_thread(mail.send_onboarding_email, mail_etudiant, link)
-        except Exception:
-            logger.exception("onboard email failed")
+            link = await asyncio.to_thread(request_onboard, interaction.user.id, mail_etudiant)
+        except OnboardError as exc:
+            await interaction.followup.send(str(exc), ephemeral=True)
+            return
+
+        if link is not None:
             await interaction.followup.send(
-                _("L'email de confirmation n'a pas pu être envoyé."), ephemeral=True
+                _("Mode test — [confirmer l'inscription]({link})").format(link=link),
+                ephemeral=True,
             )
             return
 
@@ -82,7 +67,7 @@ def register(tree: app_commands.CommandTree, guild: discord.Object) -> None:
         try:
             if settings.CODAEMON_TEST_MODE:
                 promotion_names = learnd.fixture_promotion_names()
-                role_ids = discord_actions.resolve_test_roles(promotion_names)
+                role_ids = testing_roles.resolve_testing_roles(promotion_names)
                 promotion_role_ids = [role_ids[name] for name in promotion_names]
             else:
                 rollover = learnd.fetch_rollover()
@@ -92,11 +77,11 @@ def register(tree: app_commands.CommandTree, guild: discord.Object) -> None:
                     if school_class["discord_role_id"]
                 ]
             await asyncio.to_thread(
-                discord_actions.reset_member,
+                members.reset_member,
                 str(member.id),
                 promotion_role_ids,
             )
-        except (discord_actions.TestRoleError, learnd.LearndError, httpx.HTTPError):
+        except (testing_roles.TestRoleError, learnd.LearndError, httpx.HTTPError):
             logger.exception("resetmember failed")
             await interaction.followup.send(
                 _("Le membre n'a pas pu être réinitialisé."), ephemeral=True

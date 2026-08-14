@@ -17,7 +17,7 @@ Two processes from one image (Design A):
   - /onboard (confirm page)    - /deletecategory  (admin)
   - /healthz                   - /rollover        (admin)
                                - /onboard         (students)
-        \__ both call bot/discord_actions.py (Discord REST) __/
+        \__ both call bot/discord_api/ (Discord REST) __/
 ```
 
 - The **gateway** worker handles slash commands (it makes an *outbound* WebSocket

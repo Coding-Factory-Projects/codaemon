@@ -36,7 +36,7 @@
 
     {% if state == "confirm" %}
       <p>Clique sur le bouton pour finaliser ton inscription au serveur.</p>
-      <form method="post" action="{% url 'onboarding' %}">
+      <form method="post" action="{% url 'onboard' %}">
         <input type="hidden" name="token" value="{{ token }}" />
         <button type="submit">Confirmer mon inscription</button>
       </form>
