@@ -61,9 +61,9 @@ WEBSITE_BASE_URL=http://localhost:8000
 Role IDs can remain empty. Start the two processes:
 
 ```bash
-uv run python src/manage.py migrate
-uv run python src/manage.py runserver       # terminal 1
-uv run python src/manage.py runbot          # terminal 2
+.venv/bin/python manage.py migrate
+.venv/bin/python manage.py runserver       # terminal 1
+.venv/bin/python manage.py runbot          # terminal 2
 ```
 
 No tunnel is needed when the browser is on this computer. For another device or

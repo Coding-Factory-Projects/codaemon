@@ -77,9 +77,9 @@ run_step "Install Python $python_version" "$uv_bin" python install "$python_vers
 run_step "Install locked project dependencies" "$uv_bin" sync --frozen
 run_step "Collect static assets" \
     env DATABASE_PATH="$repo_root/data/db.sqlite3" \
-    "$uv_bin" run python src/manage.py collectstatic --noinput
+    "$uv_bin" run python manage.py collectstatic --noinput
 run_step "Apply local SQLite migrations" \
     env DATABASE_PATH="$repo_root/data/db.sqlite3" \
-    "$uv_bin" run python src/manage.py migrate --noinput
+    "$uv_bin" run python manage.py migrate --noinput
 
 printf '\nOrb setup complete.\n'

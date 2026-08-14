@@ -17,9 +17,10 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY src/ ./src/
 COPY assets/ ./assets/
 COPY fixtures/ ./fixtures/
+COPY manage.py ./
 
-ENV PATH="/app/.venv/bin:$PATH"
-WORKDIR /app/src
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONPATH="/app/src"
 
 # Collect + hash + compress static assets into /app/staticfiles (served by WhiteNoise).
 RUN python manage.py collectstatic --noinput

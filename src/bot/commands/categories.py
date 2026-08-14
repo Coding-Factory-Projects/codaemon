@@ -37,14 +37,14 @@ def register(tree: app_commands.CommandTree, guild: discord.Object) -> None:
         description="Supprime une catégorie et tous ses canaux (Admin)",
         guild=guild,
     )
-    @app_commands.describe(channel_id="L'identifiant de la catégorie à supprimer")
-    async def deletecategory(interaction: discord.Interaction, channel_id: str):
+    @app_commands.describe(category_id="L'identifiant de la catégorie à supprimer")
+    async def deletecategory(interaction: discord.Interaction, category_id: str):
         if not has_any_role(interaction, settings.DISCORD_ADMIN_ROLE_ID):
             await interaction.response.send_message(NO_PERMISSION, ephemeral=True)
             return
         await interaction.response.defer(thinking=True)
         try:
-            await asyncio.to_thread(discord_actions.delete_category, channel_id)
+            await asyncio.to_thread(discord_actions.delete_category, category_id)
             await interaction.followup.send("La catégorie a été supprimée.")
         except Exception:
             logger.exception("deletecategory failed")

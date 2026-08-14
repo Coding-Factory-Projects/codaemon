@@ -17,7 +17,7 @@ lint: ## Lint and type-check Python code
 
 .PHONY: check
 check: ## Run Django system checks
-	uv run python src/manage.py check
+	.venv/bin/python manage.py check
 
 .PHONY: help
 help:
