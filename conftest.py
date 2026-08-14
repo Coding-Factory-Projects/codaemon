@@ -9,7 +9,7 @@ def _test_settings(settings):
         "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
     }
     settings.ALLOWED_HOSTS = ["testserver"]
-    settings.SHARED_SECRET = "topsecret"
+    settings.LEARND_SHARED_SECRET = "topsecret"
     settings.SHARED_SECRET_HEADER = "X-Shared-Secret"
     settings.ALLOWED_EMAIL_DOMAINS = ["edu.esiee-it.fr"]
     settings.DISCORD_GUILD_ID = "1"

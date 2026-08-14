@@ -241,17 +241,17 @@ def apply_onboarding(
         logger.info("Applied onboarding for member %s (%s)", user_id, nickname)
 
 
-def reset_test_member(user_id: str, promotion_names: list[str]) -> None:
-    """Restore a test member's nickname and onboarding roles."""
-    promotion_names = list(dict.fromkeys(promotion_names))
-    role_ids = resolve_test_roles(promotion_names)
-    remove_role_ids = [role_ids["Base"], *(role_ids[name] for name in promotion_names)]
+def reset_member(user_id: str, promotion_role_ids: list[str]) -> None:
+    """Restore a member's nickname and onboarding roles."""
+    remove_role_ids = list(dict.fromkeys([settings.DISCORD_BASE_ROLE_ID, *promotion_role_ids]))
     with _client() as client:
         _request(client, "PATCH", _member_route(user_id), {"nick": None})
-        _request(client, "PUT", _member_role_route(user_id, role_ids["Guest"]))
+        if settings.DISCORD_GUEST_ROLE_ID:
+            _request(client, "PUT", _member_role_route(user_id, settings.DISCORD_GUEST_ROLE_ID))
         for role_id in remove_role_ids:
-            _request(client, "DELETE", _member_role_route(user_id, role_id))
-        logger.info("Reset test member %s", user_id)
+            if role_id:
+                _request(client, "DELETE", _member_role_route(user_id, role_id))
+        logger.info("Reset member %s", user_id)
 
 
 # --- Internals ---

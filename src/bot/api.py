@@ -22,8 +22,8 @@ def shared_secret(request):
     provided = request.headers.get(settings.SHARED_SECRET_HEADER, "")
     if (
         provided
-        and settings.SHARED_SECRET
-        and constant_time_compare(provided, settings.SHARED_SECRET)
+        and settings.LEARND_SHARED_SECRET
+        and constant_time_compare(provided, settings.LEARND_SHARED_SECRET)
     ):
         return provided
     return None

@@ -42,22 +42,14 @@ Install dependencies and create the private fixture:
 
 ```bash
 make install
-cp .env.example .env
+make dev
 cp fixtures/students.example.json fixtures/students.json
 ```
 
-Configure `.env`:
-
-```dotenv
-CODAEMON_TEST_MODE=true
-LEARND_FIXTURE_PATH=fixtures/students.json
-DISCORD_TOKEN=...
-DISCORD_GUILD_ID=...
-DJANGO_DEBUG=true
-DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
-DATABASE_PATH=data/db.sqlite3
-WEBSITE_BASE_URL=http://localhost:8000
-```
+`make dev` renders `.env` with Ansible. The only development secret, the Discord
+bot token, is read from `op://Private/Discord/codaemon-dev/bot token`; sign in to
+the 1Password CLI first. Non-secret development configuration lives in
+`ansible/vars/dev.yml`; rerun `make dev` after changing it.
 
 Role IDs can remain empty. Start the two processes:
 
@@ -106,8 +98,10 @@ renaming a promotion.
 4. Verify the nickname, Base role, B1 Cergy role, and removal of Guest.
 
 An allowed email missing from the fixture tests “student not found.” Assign Admin
-to test `/createcategory` and `/deletecategory`. Test mode bypasses proof of email
-ownership and must never be enabled in production.
+to test `/createcategory`, `/deletecategory`, and `/resetmember`. Test mode bypasses
+proof of email ownership and must never be enabled in production. `/resetmember`
+is available in `dev` and `int`, but is not registered in `prod`; outside test mode,
+it reads active promotion role IDs from learnd.
 
 ## Development checks
 
@@ -115,28 +109,44 @@ Run `make format`, `make lint`, and `make check` before committing.
 
 ## Deployment
 
-- Push to `main` → GitHub Actions builds & pushes `ghcr.io/coding-factory-projects/codaemon`,
-  then deploys to **staging** automatically and to **production** after manual approval.
-- A production server only needs `docker-compose.yml` + `.env`; a test instance
-  also needs its private fixture.
+- Push to `main` → GitHub Actions checks the project, builds and pushes
+  `ghcr.io/coding-factory-projects/codaemon`, then deploys **int** automatically.
+- Images are tagged with the commit SHA, `latest`, and the application version.
+  The release part is incremented manually in `pyproject.toml`; CI appends the
+  six-character commit SHA, for example `2026.01-ab3832`.
+- Environment deployment is implemented once in the reusable
+  `deploy-environment.yml` workflow. The future manual production trigger will
+  promote an existing integration-tested image through the same workflow.
+- `/healthz` returns the deployed version and CI verifies it after deployment.
 
-### One-time server setup (by hand)
-- DNS A records: `codaemon.codingfactory.tech` and `codaemon-staging.codingfactory.tech` → server IP.
-- nginx vhost per host → `proxy_pass http://127.0.0.1:<GUNICORN_PORT>` (8200 prod, 8201 staging) + certbot.
-- A directory per environment (e.g. `/srv/codaemon`, `/srv/codaemon-staging`).
-- A **separate Discord application + test guild** for staging.
+### One-time int server setup
+
+The int deployment runs on the `gryt-int` SSH target in `/srv/codaemon-int`, with
+Nginx proxying `codaemon-int.codingfactory.tech` to `127.0.0.1:8200`. Install
+Docker, Nginx, and the Certbot-managed certificate manually. Once the certificate
+exists, install the tracked application directory and Nginx vhost with:
+
+```bash
+make configure-int
+```
+
+The inventory uses the `gryt-int` SSH target. Normal application deployments do
+not modify the shared Nginx configuration. The playbook manages only Codaemon's
+vhost and assumes Certbot handles certificate renewal.
 
 ### GitHub configuration
-Create two **Environments** (`staging`, `production`); add *Required reviewers* to
-`production`. Per-environment **secrets**:
+Create the `int` **Environment** with these secrets:
 
 | Secret | Meaning |
 |---|---|
 | `SSH_HOST` / `SSH_USER` / `SSH_KEY` | deploy SSH target (dedicated key) |
-| `DEPLOY_PATH` | e.g. `/srv/codaemon` or `/srv/codaemon-staging` |
-| `DOTENV` | the full `.env` contents for that environment |
+| `SSH_FINGERPRINT` | SHA256 host-key fingerprint for `gryt-int` |
+| `DOTENV` | secret `.env` values for int (Discord, `LEARND_SHARED_SECRET`, and SMTP credentials) |
 
-Make the GHCR package public so the server pulls without credentials.
+Static int configuration, including non-secret SMTP settings, lives in
+`.github/environments/int.env`. The workflow combines it with the secret `DOTENV`,
+version, and immutable image tag. Make the GHCR package public so the server can
+pull without credentials.
 
 ## learnd contract
 

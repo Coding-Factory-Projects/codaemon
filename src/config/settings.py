@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import environ
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent  # .../src
 
@@ -21,6 +22,11 @@ if _dotenv.exists():
     environ.Env.read_env(_dotenv)
 
 # --- Core ---
+PROJECT_ENV = env("PROJECT_ENV", default="dev")
+if PROJECT_ENV not in {"dev", "int", "prod"}:
+    raise ImproperlyConfigured("PROJECT_ENV must be one of: dev, int, prod")
+PROJECT_VERSION = env("PROJECT_VERSION", default="dev")
+
 SECRET_KEY = env("DJANGO_SECRET_KEY", default="dev-insecure-change-me")
 DEBUG = env("DJANGO_DEBUG")
 ALLOWED_HOSTS = env("DJANGO_ALLOWED_HOSTS")
@@ -109,10 +115,10 @@ DISCORD_EVERYONE_ROLE_ID = env("DISCORD_EVERYONE_ROLE_ID", default=DISCORD_GUILD
 
 # --- Integration (learnd, formerly TeachPilot) ---
 LEARND_BASE_URL = env("LEARND_BASE_URL", default="")
-SHARED_SECRET = env("SHARED_SECRET", default="")
+LEARND_SHARED_SECRET = env("LEARND_SHARED_SECRET", default="")
 SHARED_SECRET_HEADER = env("SHARED_SECRET_HEADER", default="X-Shared-Secret")
 
-# Explicit local/staging mode: use a student fixture and return onboarding links
+# Explicit local test mode: use a student fixture and return onboarding links
 # directly in Discord instead of sending email.
 CODAEMON_TEST_MODE = env("CODAEMON_TEST_MODE")
 LEARND_FIXTURE_PATH = Path(

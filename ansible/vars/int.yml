@@ -1,0 +1,6 @@
+---
+ansible_become: false
+project_env: int
+project_root: /srv/codaemon-int
+site_name: codaemon-int.codingfactory.tech
+gunicorn_port: 8200

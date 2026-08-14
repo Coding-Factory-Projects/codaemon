@@ -1,0 +1,44 @@
+---
+ansible_become: false
+project_root: "{{ playbook_dir }}/.."
+
+# Application
+project_env: dev
+django_secret_key: dev-insecure-change-me
+django_debug: true
+django_allowed_hosts: localhost,127.0.0.1
+django_csrf_trusted_origins: http://localhost:8000,http://127.0.0.1:8000
+website_base_url: http://localhost:8000
+
+# Runtime
+gunicorn_port: 8000
+gunicorn_workers: 2
+database_path: "{{ project_root }}/data/db.sqlite3"
+
+# Discord
+discord_token: >-
+  {{ lookup('ansible.builtin.pipe', 'op read "op://Private/Discord/codaemon-dev/bot token"') }}
+discord_client_id: ""
+discord_guild_id: "1537805165837549629"
+discord_admin_role_id: ""
+discord_base_role_id: ""
+discord_guest_role_id: ""
+discord_product_owners_role_id: ""
+
+# LearnD
+learnd_base_url: ""
+learnd_shared_secret: ""
+shared_secret_header: X-Shared-Secret
+
+# Email
+email_host: smtp.eu.mailgun.org
+email_port: 587
+email_use_tls: true
+email_host_user: ""
+email_host_password: ""
+default_from_email: Coding Factory <bot@codingfactory.tech>
+
+# Onboarding
+allowed_email_domains: edu.itescia.fr,edu.esiee-it.fr
+codaemon_test_mode: true
+learnd_fixture_path: fixtures/students.json

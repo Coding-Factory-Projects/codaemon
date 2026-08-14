@@ -1,0 +1,2 @@
+---
+nginx_site_filename: "codaemon-{{ project_env }}.conf"

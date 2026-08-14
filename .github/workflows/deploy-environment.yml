@@ -1,0 +1,82 @@
+name: Deploy environment
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      image_tag:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+      config_path:
+        required: true
+        type: string
+      deploy_path:
+        required: true
+        type: string
+      health_url:
+        required: true
+        type: string
+
+env:
+  IMAGE: ghcr.io/coding-factory-projects/codaemon
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Render .env
+        run: |
+          printf '%s\n' "$DOTENV" > .env
+          cat '${{ inputs.config_path }}' >> .env
+          cat >> .env <<EOF
+          PROJECT_VERSION=${{ inputs.version }}
+          IMAGE_TAG=${{ inputs.image_tag }}
+          EOF
+        env:
+          DOTENV: ${{ secrets.DOTENV }}
+      - name: Copy compose + env to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          fingerprint: ${{ secrets.SSH_FINGERPRINT }}
+          source: "docker-compose.yml,.env"
+          target: ${{ inputs.deploy_path }}
+      - name: Pull & restart
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          fingerprint: ${{ secrets.SSH_FINGERPRINT }}
+          script: |
+            cd ${{ inputs.deploy_path }}
+            docker compose pull
+            docker compose up -d --remove-orphans
+            docker image ls ${{ env.IMAGE }} --format '{{.Repository}}:{{.Tag}}' \
+              | grep -v ':${{ inputs.image_tag }}$' \
+              | grep -v ':${{ inputs.version }}$' \
+              | grep -v ':latest$' \
+              | xargs -r docker image rm || true
+            docker image prune -f
+      - name: Verify deployment
+        run: |
+          curl --fail --silent --show-error \
+            --retry 20 --retry-delay 3 --retry-all-errors \
+            '${{ inputs.health_url }}' \
+            | jq --exit-status \
+              --arg version '${{ inputs.version }}' \
+              '.status == "ok" and .version == $version'

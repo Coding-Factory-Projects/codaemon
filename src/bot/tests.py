@@ -15,7 +15,7 @@ def _post(client, path, body, **headers):
 
 
 def test_healthz(client):
-    assert client.get("/healthz").json() == {"status": "ok"}
+    assert client.get("/healthz").json() == {"status": "ok", "version": "dev"}
 
 
 def test_token_roundtrip():

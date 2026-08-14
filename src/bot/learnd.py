@@ -51,7 +51,7 @@ def patch_student(email: str, discord_id: str) -> dict:
         resp = httpx.patch(
             url,
             json={"email": email, "discord_id": discord_id},
-            headers={settings.SHARED_SECRET_HEADER: settings.SHARED_SECRET},
+            headers={settings.SHARED_SECRET_HEADER: settings.LEARND_SHARED_SECRET},
             timeout=30,
         )
         if resp.status_code == 404:
@@ -71,7 +71,7 @@ def fetch_rollover() -> RolloverData:
     try:
         response = httpx.get(
             url,
-            headers={settings.SHARED_SECRET_HEADER: settings.SHARED_SECRET},
+            headers={settings.SHARED_SECRET_HEADER: settings.LEARND_SHARED_SECRET},
             timeout=30,
         )
         response.raise_for_status()
@@ -97,7 +97,7 @@ def patch_school_class_discord_ids(school_class_id: str, role_id: str, category_
         response = httpx.patch(
             url,
             json={"discord_role_id": role_id, "discord_category_id": category_id},
-            headers={settings.SHARED_SECRET_HEADER: settings.SHARED_SECRET},
+            headers={settings.SHARED_SECRET_HEADER: settings.LEARND_SHARED_SECRET},
             timeout=30,
         )
         response.raise_for_status()

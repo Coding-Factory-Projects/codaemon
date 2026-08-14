@@ -1,4 +1,5 @@
-from django.http import JsonResponse
+from django.conf import settings
+from django.http import HttpRequest, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 
@@ -30,5 +31,5 @@ def onboarding(request):
     )
 
 
-def healthz(request):
-    return JsonResponse({"status": "ok"})
+def healthz(request: HttpRequest) -> JsonResponse:
+    return JsonResponse({"status": "ok", "version": settings.PROJECT_VERSION})

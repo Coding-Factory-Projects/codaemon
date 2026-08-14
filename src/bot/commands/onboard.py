@@ -64,7 +64,7 @@ def register(tree: app_commands.CommandTree, guild: discord.Object) -> None:
             _("Un email a été envoyé pour confirmer ton inscription."), ephemeral=True
         )
 
-    if not settings.CODAEMON_TEST_MODE:
+    if settings.PROJECT_ENV == "prod":
         return
 
     @tree.command(
@@ -80,11 +80,21 @@ def register(tree: app_commands.CommandTree, guild: discord.Object) -> None:
 
         await interaction.response.defer(thinking=True, ephemeral=True)
         try:
-            promotion_names = learnd.fixture_promotion_names()
+            if settings.CODAEMON_TEST_MODE:
+                promotion_names = learnd.fixture_promotion_names()
+                role_ids = discord_actions.resolve_test_roles(promotion_names)
+                promotion_role_ids = [role_ids[name] for name in promotion_names]
+            else:
+                rollover = learnd.fetch_rollover()
+                promotion_role_ids = [
+                    school_class["discord_role_id"]
+                    for school_class in rollover["active_year"]["school_classes"]
+                    if school_class["discord_role_id"]
+                ]
             await asyncio.to_thread(
-                discord_actions.reset_test_member,
+                discord_actions.reset_member,
                 str(member.id),
-                promotion_names,
+                promotion_role_ids,
             )
         except (discord_actions.TestRoleError, learnd.LearndError, httpx.HTTPError):
             logger.exception("resetmember failed")

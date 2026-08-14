@@ -1,5 +1,19 @@
 .DEFAULT_GOAL := help
 
+.SECTION: Environment
+
+ANSIBLE_PLAYBOOK := ansible-playbook
+
+.PHONY: dev
+dev: ## Render the local .env from Ansible and 1Password
+	$(ANSIBLE_PLAYBOOK) --connection=local --inventory ansible/inventories/dev \
+		--extra-vars "deploy_env=dev" --tags dev ansible/site.yml
+
+.PHONY: configure-int
+configure-int: ## Install the int application directory and Nginx configuration
+	$(ANSIBLE_PLAYBOOK) --inventory ansible/inventories/int \
+		--extra-vars "deploy_env=int" --tags configure ansible/site.yml
+
 .SECTION: Code
 
 .PHONY: install

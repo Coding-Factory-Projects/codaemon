@@ -1,0 +1,64 @@
+---
+- name: Configure codaemon
+  hosts: all
+  become: "{{ ansible_become }}"
+
+  vars_files:
+    - vars/common.yml
+    - "vars/{{ deploy_env }}.yml"
+
+  tasks:
+    - name: Render local development environment
+      ansible.builtin.template:
+        src: templates/codaemon.env.j2
+        dest: "{{ project_root }}/.env"
+        mode: "0600"
+      no_log: true
+      tags: dev
+
+    - name: Create application directory
+      ansible.builtin.file:
+        path: "{{ project_root }}"
+        state: directory
+        mode: "0755"
+      tags: configure
+
+    - name: Check TLS certificate
+      ansible.builtin.stat:
+        path: "/etc/letsencrypt/live/{{ site_name }}/fullchain.pem"
+      register: certificate
+      tags: configure
+
+    - name: Require manually provisioned TLS certificate
+      ansible.builtin.assert:
+        that: certificate.stat.exists
+        fail_msg: "Provision the {{ site_name }} certificate with Certbot first"
+      tags: configure
+
+    - name: Install Nginx configuration
+      ansible.builtin.template:
+        src: templates/nginx.conf.j2
+        dest: "/etc/nginx/sites-available/{{ nginx_site_filename }}"
+        mode: "0644"
+      notify: Reload Nginx
+      tags: configure
+
+    - name: Enable Nginx site
+      ansible.builtin.file:
+        src: "/etc/nginx/sites-available/{{ nginx_site_filename }}"
+        dest: "/etc/nginx/sites-enabled/{{ nginx_site_filename }}"
+        state: link
+      notify: Reload Nginx
+      tags: configure
+
+  handlers:
+    - name: Validate Nginx configuration
+      listen: Reload Nginx
+      ansible.builtin.command: nginx -t
+      changed_when: false
+
+    - name: Reload Nginx service
+      listen: Reload Nginx
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded
