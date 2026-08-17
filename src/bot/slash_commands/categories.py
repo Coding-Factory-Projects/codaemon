@@ -33,6 +33,40 @@ def register(tree: app_commands.CommandTree, guild: discord.Object) -> None:
             await interaction.followup.send("Une erreur s'est produite !")
 
     @tree.command(
+        name="renamecategory",
+        description="Renomme une catégorie et son rôle (Admin)",
+        guild=guild,
+    )
+    @app_commands.describe(
+        category_id="L'identifiant de la catégorie à renommer",
+        role_id="L'identifiant du rôle associé",
+        name="Le nouveau nom de la catégorie et du rôle",
+    )
+    async def renamecategory(
+        interaction: discord.Interaction,
+        category_id: str,
+        role_id: str,
+        name: str,
+    ) -> None:
+        if not has_any_role(interaction, settings.DISCORD_ADMIN_ROLE_ID):
+            await interaction.response.send_message(NO_PERMISSION, ephemeral=True)
+            return
+        await interaction.response.defer(thinking=True)
+        try:
+            await asyncio.to_thread(
+                discord_categories.rename_category,
+                category_id,
+                role_id,
+                name,
+            )
+            await interaction.followup.send(
+                f"La catégorie et son rôle ont été renommés « {name} »."
+            )
+        except Exception:
+            logger.exception("renamecategory failed")
+            await interaction.followup.send("Une erreur s'est produite !")
+
+    @tree.command(
         name="deletecategory",
         description="Supprime une catégorie et tous ses canaux (Admin)",
         guild=guild,

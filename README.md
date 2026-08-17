@@ -15,7 +15,8 @@ Two processes from one image (Design A):
   web (gunicorn / WSGI)        runbot (discord.py gateway)
   - /on-promotion-created      - /createcategory  (admin)
   - /onboard (confirm page)    - /deletecategory  (admin)
-  - /healthz                   - /rollover        (admin)
+  - /healthz                   - /renamecategory  (admin)
+                               - /rollover        (admin)
                                - /onboard         (students)
         \__ both call bot/discord_api/ (Discord REST) __/
 ```
@@ -98,10 +99,10 @@ renaming a promotion.
 4. Verify the nickname, Base role, B1 Cergy role, and removal of Guest.
 
 An allowed email missing from the fixture tests “student not found.” Assign Admin
-to test `/createcategory`, `/deletecategory`, and `/resetmember`. Test mode bypasses
-proof of email ownership and must never be enabled in production. `/resetmember`
-is available in `dev` and `int`, but is not registered in `prod`; outside test mode,
-it reads active promotion role IDs from learnd.
+to test `/createcategory`, `/renamecategory`, `/deletecategory`, and `/resetmember`.
+Test mode bypasses proof of email ownership and must never be enabled in production.
+`/resetmember` is available in `dev` and `int`, but is not registered in `prod`;
+outside test mode, it reads active promotion role IDs from learnd.
 
 ## Development checks
 

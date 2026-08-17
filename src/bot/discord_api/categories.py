@@ -147,6 +147,13 @@ def create_category(name: str) -> str:
         return category["id"]
 
 
+def rename_category(category_id: str, role_id: str, name: str) -> None:
+    """Give a category and its associated role the same new name."""
+    with discord.create_client() as client:
+        discord.request(client, "PATCH", discord.role_route(role_id), {"name": name})
+        discord.request(client, "PATCH", discord.channel_route(category_id), {"name": name})
+
+
 def delete_category(category_id: str) -> None:
     """Delete a category and every channel it contains."""
     with discord.create_client() as client:
