@@ -9,6 +9,7 @@ from django.core.management.base import BaseCommand, CommandError
 from bot import learnd
 from bot.discord_api import testing_roles
 from bot.slash_commands import categories, onboard, rollover
+from config.constants import StudentBackend
 
 logger = logging.getLogger(__name__)
 
@@ -21,14 +22,16 @@ class Command(BaseCommand):
             self.stderr.write("DISCORD_TOKEN and DISCORD_GUILD_ID must be set.")
             return
 
-        if settings.CODAEMON_TEST_MODE:
+        if settings.STUDENT_BACKEND == StudentBackend.FIXTURE:
             try:
                 promotion_names = learnd.fixture_promotion_names()
                 roles = testing_roles.setup_testing_roles(promotion_names)
             except (testing_roles.TestRoleError, learnd.LearndError, httpx.HTTPError) as exc:
                 raise CommandError(f"Test setup failed: {exc}") from exc
             role_summary = ", ".join(f"{name}={role_id}" for name, role_id in roles.items())
-            self.stdout.write(self.style.WARNING(f"TEST MODE enabled. Roles: {role_summary}"))
+            self.stdout.write(
+                self.style.WARNING(f"Fixture student backend enabled. Roles: {role_summary}")
+            )
         else:
             role_settings = {
                 "DISCORD_ADMIN_ROLE_ID": settings.DISCORD_ADMIN_ROLE_ID,

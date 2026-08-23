@@ -26,10 +26,17 @@ Two processes from one image (Design A):
 - The **web** process handles the learnd webhook + the onboarding page, and calls
   Discord over REST. No async needed there.
 
-## Test mode
+## Fixture-backed onboarding
 
-Test mode reads a private student fixture instead of learnd and returns the
-confirmation link directly in Discord instead of sending email.
+Onboarding configuration has two independent settings:
+
+- `STUDENT_BACKEND=fixture|learnd` selects the student source. The fixture backend
+  also finds or creates Discord roles from promotion names in the private fixture.
+- `ONBOARD_DELIVERY=email|link` either sends the confirmation email or returns the
+  link ephemerally in Discord. Link delivery bypasses proof of email ownership and
+  must never be used in production.
+
+Local development defaults to `fixture` and `link`.
 
 ### 1. Prepare Discord
 
@@ -52,7 +59,7 @@ bot token, is read from `op://Private/Discord/codaemon-dev/bot token`; sign in t
 the 1Password CLI first. Non-secret development configuration lives in
 `ansible/vars/dev.yml`; rerun `make dev` after changing it.
 
-Role IDs can remain empty. Start the two processes:
+With the fixture backend, role IDs can remain empty. Start the two processes:
 
 ```bash
 .venv/bin/python manage.py migrate
@@ -67,10 +74,12 @@ tester, expose port 8000 and set the tunnel host in `WEBSITE_BASE_URL` and
 ### 3. Run a deployed instance
 
 Create `fixtures/` beside `docker-compose.yml` and place the private
-`students.json` inside it. Configure test mode plus the Discord values above,
-then set:
+`students.json` inside it. Configure the Discord values above, then set:
 
 ```dotenv
+STUDENT_BACKEND=fixture
+ONBOARD_DELIVERY=email
+LEARND_FIXTURE_PATH=fixtures/students.json
 DJANGO_ALLOWED_HOSTS=codaemon-test.example.com
 DJANGO_CSRF_TRUSTED_ORIGINS=https://codaemon-test.example.com
 WEBSITE_BASE_URL=https://codaemon-test.example.com
@@ -88,21 +97,20 @@ the image.
 
 ### 4. Test onboarding
 
-On `runbot` startup, the bot finds or creates Admin, Base, Guest, Product Owners,
-and every promotion role declared in the fixture. Existing roles are reused;
-duplicate or reserved names are rejected. Restart `runbot` after adding or
-renaming a promotion.
+With `STUDENT_BACKEND=fixture`, `runbot` finds or creates Admin, Base, Guest,
+Product Owners, and every promotion role declared in the fixture. Existing roles
+are reused; duplicate or reserved names are rejected. Restart `runbot` after
+adding or renaming a promotion.
 
 1. Assign Guest to the test member.
 2. Run `/onboard ada.lovelace.test@edu.esiee-it.fr`.
-3. Open the private confirmation link.
+3. Open the confirmation link received by email or returned privately in Discord.
 4. Verify the nickname, Base role, B1 Cergy role, and removal of Guest.
 
 An allowed email missing from the fixture tests “student not found.” Assign Admin
 to test `/createcategory`, `/renamecategory`, `/deletecategory`, and `/resetmember`.
-Test mode bypasses proof of email ownership and must never be enabled in production.
 `/resetmember` is available in `dev` and `int`, but is not registered in `prod`;
-outside test mode, it reads active promotion role IDs from learnd.
+with the LearnD backend, it reads active promotion role IDs from LearnD.
 
 ## Development checks
 
@@ -145,9 +153,14 @@ Create the `int` **Environment** with these secrets:
 | `DOTENV` | secret `.env` values for int (Discord, `LEARND_SHARED_SECRET`, and SMTP credentials) |
 
 Static int configuration, including non-secret SMTP settings, lives in
-`.github/environments/int.env`. The workflow combines it with the secret `DOTENV`,
-version, and immutable image tag. Make the GHCR package public so the server can
-pull without credentials.
+`.github/environments/int.env`. Until LearnD is deployed, int uses the fixture
+backend with email delivery. Provision `/srv/codaemon-int/fixtures/students.json`
+manually; deployments deliberately do not copy this private file. Change
+`STUDENT_BACKEND` to `learnd` once the integration is available.
+
+The workflow combines static configuration with the secret `DOTENV`, version,
+and immutable image tag. Make the GHCR package public so the server can pull
+without credentials.
 
 ## learnd contract
 

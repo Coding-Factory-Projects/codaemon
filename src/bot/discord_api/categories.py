@@ -7,6 +7,7 @@ from django.conf import settings
 
 from bot.discord_api import client as discord
 from bot.discord_api import testing_roles
+from config.constants import StudentBackend
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ def create_class_category(
     name: str, campus: str, existing_role_id: str | None = None
 ) -> tuple[str, str]:
     """Idempotently create a class role, private category, and channel template."""
-    if settings.CODAEMON_TEST_MODE:
+    if settings.STUDENT_BACKEND == StudentBackend.FIXTURE:
         role_ids = testing_roles.resolve_testing_roles()
         settings.DISCORD_PRODUCT_OWNERS_ROLE_ID = role_ids["Product Owners"]
 

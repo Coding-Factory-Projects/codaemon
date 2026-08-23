@@ -1,4 +1,4 @@
-"""Discord role setup for codaemon test mode."""
+"""Discord role setup for the fixture student backend."""
 
 import logging
 
@@ -13,7 +13,7 @@ TEST_ROLE_NAMES = ("Admin", "Base", "Guest", "Product Owners")
 
 
 class TestRoleError(Exception):
-    """Test roles are missing or ambiguous."""
+    """Fixture roles are missing or ambiguous."""
 
 
 def setup_testing_roles(promotion_names: list[str]) -> dict[str, str]:
@@ -39,7 +39,7 @@ def setup_testing_roles(promotion_names: list[str]) -> dict[str, str]:
 
 
 def resolve_testing_roles(promotion_names: list[str] | None = None) -> dict[str, str]:
-    """Resolve test roles without creating or modifying anything."""
+    """Resolve fixture roles without creating or modifying anything."""
     names = _test_role_names(promotion_names or [])
     with discord.create_client() as client:
         roles = _get_roles(client)

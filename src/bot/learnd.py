@@ -7,6 +7,8 @@ from typing import TypedDict
 import httpx
 from django.conf import settings
 
+from config.constants import StudentBackend
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,7 +45,7 @@ def patch_student(email: str, discord_id: str) -> dict:
         PATCH {LEARND_BASE_URL}/promotions/students  {email, discord_id}
         -> {"firstName", "lastName", "promotion": {"discord_role_id"}}
     """
-    if settings.CODAEMON_TEST_MODE:
+    if settings.STUDENT_BACKEND == StudentBackend.FIXTURE:
         return _fixture_student(email, discord_id)
 
     url = f"{settings.LEARND_BASE_URL.rstrip('/')}/promotions/students"

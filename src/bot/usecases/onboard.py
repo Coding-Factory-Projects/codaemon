@@ -13,6 +13,7 @@ from bot import email as outbound_email
 from bot import learnd
 from bot.discord_api import members, testing_roles
 from bot.models import OnboardingLog
+from config.constants import OnboardDelivery, StudentBackend
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ class OnboardToken(TypedDict):
 
 
 def request_onboard(discord_id: str | int, email: str) -> str | None:
-    """Validate an email and send its confirmation link, returning it in test mode."""
+    """Validate an email and deliver its confirmation link as configured."""
     normalized_email = email.strip().casefold()
     domain = normalized_email.split("@")[-1]
     if domain not in settings.ALLOWED_EMAIL_DOMAINS:
@@ -39,7 +40,7 @@ def request_onboard(discord_id: str | int, email: str) -> str | None:
 
     token = make_token(discord_id, normalized_email)
     link = f"{settings.WEBSITE_BASE_URL.rstrip('/')}/onboard?token={token}"
-    if settings.CODAEMON_TEST_MODE:
+    if settings.ONBOARD_DELIVERY == OnboardDelivery.LINK:
         return link
 
     try:
@@ -74,7 +75,7 @@ def complete_onboard(token: str) -> str:
 
     try:
         nickname = f"{student['firstName']} {student['lastName'].upper()}"
-        if settings.CODAEMON_TEST_MODE:
+        if settings.STUDENT_BACKEND == StudentBackend.FIXTURE:
             promotion_name = student["promotion"]["discord_role_name"]
             role_ids = testing_roles.resolve_testing_roles([promotion_name])
             base_role_id = role_ids["Base"]

@@ -11,6 +11,7 @@ from bot import learnd
 from bot.discord_api import members, testing_roles
 from bot.slash_commands.permissions import has_any_role
 from bot.usecases.onboard import OnboardError, request_onboard
+from config.constants import StudentBackend
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,7 @@ def register(tree: app_commands.CommandTree, guild: discord.Object) -> None:
 
         await interaction.response.defer(thinking=True, ephemeral=True)
         try:
-            if settings.CODAEMON_TEST_MODE:
+            if settings.STUDENT_BACKEND == StudentBackend.FIXTURE:
                 promotion_names = learnd.fixture_promotion_names()
                 role_ids = testing_roles.resolve_testing_roles(promotion_names)
                 promotion_role_ids = [role_ids[name] for name in promotion_names]

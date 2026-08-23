@@ -40,5 +40,6 @@ default_from_email: Coding Factory <bot@codingfactory.tech>
 
 # Onboarding
 allowed_email_domains: edu.itescia.fr,edu.esiee-it.fr
-codaemon_test_mode: true
+student_backend: fixture
+onboard_delivery: link
 learnd_fixture_path: fixtures/students.json

@@ -3,13 +3,14 @@ from pathlib import Path
 import environ
 from django.core.exceptions import ImproperlyConfigured
 
+from config.constants import OnboardDelivery, StudentBackend
+
 BASE_DIR = Path(__file__).resolve().parent.parent  # .../src
 
 env = environ.Env(
     DJANGO_DEBUG=(bool, False),
     DJANGO_ALLOWED_HOSTS=(list, []),
     DJANGO_CSRF_TRUSTED_ORIGINS=(list, []),
-    CODAEMON_TEST_MODE=(bool, False),
     ALLOWED_EMAIL_DOMAINS=(list, ["edu.itescia.fr", "edu.esiee-it.fr"]),
     EMAIL_PORT=(int, 587),
     EMAIL_USE_TLS=(bool, True),
@@ -118,9 +119,18 @@ LEARND_BASE_URL = env("LEARND_BASE_URL", default="")
 LEARND_SHARED_SECRET = env("LEARND_SHARED_SECRET", default="")
 SHARED_SECRET_HEADER = env("SHARED_SECRET_HEADER", default="X-Shared-Secret")
 
-# Explicit local test mode: use a student fixture and return onboarding links
-# directly in Discord instead of sending email.
-CODAEMON_TEST_MODE = env("CODAEMON_TEST_MODE")
+try:
+    STUDENT_BACKEND = StudentBackend(env("STUDENT_BACKEND", default=StudentBackend.LEARND))
+except ValueError as exc:
+    allowed = ", ".join(StudentBackend)
+    raise ImproperlyConfigured(f"STUDENT_BACKEND must be one of: {allowed}") from exc
+
+try:
+    ONBOARD_DELIVERY = OnboardDelivery(env("ONBOARD_DELIVERY", default=OnboardDelivery.EMAIL))
+except ValueError as exc:
+    allowed = ", ".join(OnboardDelivery)
+    raise ImproperlyConfigured(f"ONBOARD_DELIVERY must be one of: {allowed}") from exc
+
 LEARND_FIXTURE_PATH = Path(
     env("LEARND_FIXTURE_PATH", default=str(BASE_DIR.parent / "fixtures" / "students.json"))
 )
