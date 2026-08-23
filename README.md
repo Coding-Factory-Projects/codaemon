@@ -36,7 +36,8 @@ Onboarding configuration has two independent settings:
   link ephemerally in Discord. Link delivery bypasses proof of email ownership and
   must never be used in production.
 
-Local development defaults to `fixture` and `link`.
+Local development defaults to `fixture` and `link`. Dev and int also allow
+`gmail.com` addresses for test mailboxes; production keeps only school domains.
 
 ### 1. Prepare Discord
 
