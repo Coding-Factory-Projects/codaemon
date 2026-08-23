@@ -2,24 +2,48 @@ name: Deploy production
 
 on:
   workflow_dispatch:
-    inputs:
-      image_tag:
-        description: Full commit SHA of an image already deployed to int
-        required: true
-        type: string
-      version:
-        description: Deployed version reported by /healthz (for example 2026.01-ab3832)
-        required: true
-        type: string
 
 jobs:
+  resolve-image:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      image_tag: ${{ steps.metadata.outputs.image_tag }}
+      version: ${{ steps.metadata.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require a successful integration deployment
+        run: |
+          run_id=$(gh run list \
+            --workflow deploy.yml \
+            --commit "$GITHUB_SHA" \
+            --status success \
+            --limit 1 \
+            --json databaseId \
+            --jq '.[0].databaseId // empty')
+          if [ -z "$run_id" ]; then
+            echo "No successful integration deployment found for $GITHUB_SHA" >&2
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Resolve image metadata
+        id: metadata
+        run: |
+          release=$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          echo "image_tag=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          echo "version=${release}-$(git rev-parse --short=6 HEAD)" >> "$GITHUB_OUTPUT"
+
   deploy-prod:
+    needs: resolve-image
     uses: ./.github/workflows/deploy-environment.yml
     secrets: inherit
     with:
       environment: prod
-      image_tag: ${{ inputs.image_tag }}
-      version: ${{ inputs.version }}
+      image_tag: ${{ needs.resolve-image.outputs.image_tag }}
+      version: ${{ needs.resolve-image.outputs.version }}
       config_path: .github/environments/prod.env
       deploy_path: /srv/codaemon-prod
       health_url: https://codaemon.codingfactory.tech/healthz

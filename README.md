@@ -184,8 +184,8 @@ credentials. Static production configuration lives in
 The workflow combines static configuration with the secret `DOTENV`, version,
 and immutable image tag. Make the GHCR package public so the server can pull
 without credentials. To deploy production, run the `Deploy production` workflow
-with the full commit SHA and version from a successful int deployment (shown by
-its build job and `/healthz` response).
+on the Git ref to promote. It derives the immutable image tag and version, and
+refuses deployment unless that exact commit has a successful int workflow run.
 
 ## learnd contract
 
