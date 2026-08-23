@@ -1,0 +1,25 @@
+name: Deploy production
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Full commit SHA of an image already deployed to int
+        required: true
+        type: string
+      version:
+        description: Deployed version reported by /healthz (for example 2026.01-ab3832)
+        required: true
+        type: string
+
+jobs:
+  deploy-prod:
+    uses: ./.github/workflows/deploy-environment.yml
+    secrets: inherit
+    with:
+      environment: prod
+      image_tag: ${{ inputs.image_tag }}
+      version: ${{ inputs.version }}
+      config_path: .github/environments/prod.env
+      deploy_path: /srv/codaemon-prod
+      health_url: https://codaemon.codingfactory.tech/healthz

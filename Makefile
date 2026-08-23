@@ -14,6 +14,11 @@ configure-int: ## Install the int application directory and Nginx configuration
 	$(ANSIBLE_PLAYBOOK) --inventory ansible/inventories/int \
 		--extra-vars "deploy_env=int" --tags configure ansible/site.yml
 
+.PHONY: configure-prod
+configure-prod: ## Install the prod application directory and Nginx configuration
+	$(ANSIBLE_PLAYBOOK) --inventory ansible/inventories/prod \
+		--extra-vars "deploy_env=prod" --tags configure ansible/site.yml
+
 .SECTION: Code
 
 .PHONY: install

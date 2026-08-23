@@ -31,7 +31,7 @@ Two processes from one image (Design A):
 Onboarding configuration has two independent settings:
 
 - `STUDENT_BACKEND=fixture|learnd` selects the student source. The fixture backend
-  also finds or creates Discord roles from promotion names in the private fixture.
+  also finds or creates Discord roles from promotion names in the fixture.
 - `ONBOARD_DELIVERY=email|link` either sends the confirmation email or returns the
   link ephemerally in Discord. Link delivery bypasses proof of email ownership and
   must never be used in production.
@@ -47,7 +47,7 @@ Local development defaults to `fixture` and `link`. Dev and int also allow
 
 ### 2. Run locally
 
-Install dependencies and create the private fixture:
+Install dependencies and create the local runtime fixture:
 
 ```bash
 make install
@@ -125,8 +125,8 @@ Run `make format`, `make lint`, and `make check` before committing.
   The release part is incremented manually in `pyproject.toml`; CI appends the
   six-character commit SHA, for example `2026.01-ab3832`.
 - Environment deployment is implemented once in the reusable
-  `deploy-environment.yml` workflow. The future manual production trigger will
-  promote an existing integration-tested image through the same workflow.
+  `deploy-environment.yml` workflow. The manual `Deploy production` workflow
+  promotes an existing integration-tested image through the same workflow.
 - `/healthz` returns the deployed version and CI verifies it after deployment.
 
 ### One-time int server setup
@@ -144,6 +144,21 @@ The inventory uses the `gryt-int` SSH target. Normal application deployments do
 not modify the shared Nginx configuration. The playbook manages only Codaemon's
 vhost and assumes Certbot handles certificate renewal.
 
+### One-time prod server setup
+
+Production runs on the `gryt-coding` SSH target in `/srv/codaemon-prod`, with
+Nginx proxying `codaemon.codingfactory.tech` to `127.0.0.1:8200`. Once the
+manually provisioned certificate exists, install the application directory and
+Nginx vhost with:
+
+```bash
+make configure-prod
+```
+
+Normal deployments only copy the Compose and environment files, then restart
+the containers. Certificate issuance and renewal remain managed outside this
+playbook.
+
 ### GitHub configuration
 Create the `int` **Environment** with these secrets:
 
@@ -155,13 +170,22 @@ Create the `int` **Environment** with these secrets:
 
 Static int configuration, including non-secret SMTP settings, lives in
 `.github/environments/int.env`. Until LearnD is deployed, int uses the fixture
-backend with email delivery. Provision `/srv/codaemon-int/fixtures/students.json`
-manually; deployments deliberately do not copy this private file. Change
-`STUDENT_BACKEND` to `learnd` once the integration is available.
+backend with email delivery. Each int deployment copies the tracked
+`fixtures/students.example.json` to `/srv/codaemon-int/fixtures/students.json`
+before Compose updates the services. Change `STUDENT_BACKEND` to `learnd` once
+the integration is available.
+
+Create the `prod` **Environment** with the same four secrets, pointed at
+`gryt-coding` and the production credentials. Production's `DOTENV` must include
+the Discord credentials, `DJANGO_SECRET_KEY`, `LEARND_SHARED_SECRET`, and SMTP
+credentials. Static production configuration lives in
+`.github/environments/prod.env` and uses LearnD with email delivery.
 
 The workflow combines static configuration with the secret `DOTENV`, version,
 and immutable image tag. Make the GHCR package public so the server can pull
-without credentials.
+without credentials. To deploy production, run the `Deploy production` workflow
+with the full commit SHA and version from a successful int deployment (shown by
+its build job and `/healthz` response).
 
 ## learnd contract
 
