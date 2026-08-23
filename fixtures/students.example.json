@@ -1,4 +1,14 @@
 {
+  "robin.penea+testing@gmail.com": {
+    "firstName": "Astrid",
+    "lastName": "Penea",
+    "promotion": {"discord_role_name": "B1 Cergy"}
+  },
+  "robin.penea+testing2@gmail.com": {
+    "firstName": "Pixie",
+    "lastName": "Penea",
+    "promotion": {"discord_role_name": "B1 Cergy"}
+  },
   "ada.lovelace.test@edu.esiee-it.fr": {
     "firstName": "Ada",
     "lastName": "Lovelace",
