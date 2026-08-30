@@ -1,8 +1,9 @@
 """HTTP client for learnd, the roster system of record."""
 
 import json
+import time
 from collections import defaultdict
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 import httpx
 from django.conf import settings
@@ -62,6 +63,85 @@ class _SchoolClass(TypedDict):
     academic_year_status: str
     discord_role_id: str
     discord_category_id: str
+
+
+class LearndStatus(TypedDict):
+    health_ok: bool
+    health_latency_ms: int | None
+    api_status: Literal["ok", "missing_token", "unauthorized", "unreachable", "invalid"]
+    api_latency_ms: int | None
+    active_years: list[int] | None
+    school_class_count: int | None
+
+
+def check_status() -> LearndStatus:
+    """Check learnd health and authenticated API access without exposing data."""
+    result: LearndStatus = {
+        "health_ok": False,
+        "health_latency_ms": None,
+        "api_status": "unreachable",
+        "api_latency_ms": None,
+        "active_years": None,
+        "school_class_count": None,
+    }
+    base_url = settings.LEARND_BASE_URL.rstrip("/")
+    if not base_url:
+        return result
+
+    started_at = time.monotonic()
+    try:
+        response = httpx.get(f"{base_url}/health", timeout=10)
+        response.raise_for_status()
+        result["health_ok"] = True
+    except httpx.HTTPError:
+        pass
+    result["health_latency_ms"] = round((time.monotonic() - started_at) * 1000)
+
+    if not settings.LEARND_API_TOKEN:
+        result["api_status"] = "missing_token"
+        return result
+
+    started_at = time.monotonic()
+    try:
+        with httpx.Client(
+            base_url=f"{base_url}/api/v1/",
+            headers={"Authorization": f"Bearer {settings.LEARND_API_TOKEN}"},
+            timeout=10,
+        ) as client:
+            academic_years_response = client.get("academic-years/")
+            academic_years_response.raise_for_status()
+            school_classes_response = client.get("school-classes/")
+            school_classes_response.raise_for_status()
+        academic_years = academic_years_response.json()
+        school_classes = school_classes_response.json()
+        if not isinstance(academic_years, list):
+            result["api_status"] = "invalid"
+            return result
+        if not isinstance(school_classes, list):
+            result["api_status"] = "invalid"
+            return result
+        result["active_years"] = []
+        for year in academic_years:
+            if not isinstance(year, dict):
+                continue
+            if year.get("status") != "active":
+                continue
+            start_year = year.get("start_year")
+            if not isinstance(start_year, int):
+                continue
+            result["active_years"].append(start_year)
+        result["school_class_count"] = len(school_classes)
+        result["api_status"] = "ok"
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code in {401, 403}:
+            result["api_status"] = "unauthorized"
+    except httpx.HTTPError:
+        pass
+    except ValueError:
+        result["api_status"] = "invalid"
+    finally:
+        result["api_latency_ms"] = round((time.monotonic() - started_at) * 1000)
+    return result
 
 
 def onboard_student(email: str, discord_user_id: str) -> OnboardStudent:

@@ -8,7 +8,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from bot import learnd
 from bot.discord_api import testing_roles
-from bot.slash_commands import categories, onboard, rollover
+from bot.slash_commands import categories, onboard, rollover, status
 from config.constants import StudentBackend
 
 logger = logging.getLogger(__name__)
@@ -53,6 +53,7 @@ class Command(BaseCommand):
         categories.register(tree, guild)
         onboard.register(tree, guild)
         rollover.register(tree, guild)
+        status.register(tree, guild)
 
         @client.event
         async def on_ready():

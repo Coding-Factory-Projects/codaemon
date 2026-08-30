@@ -17,6 +17,7 @@ Two processes from one image (Design A):
   - /healthz                   - /deletecategory  (admin)
                                - /renamecategory  (admin)
                                - /rollover        (admin)
+                               - /status          (admin)
                                - /onboard         (students)
         \__ both call bot/discord_api/ (Discord REST) __/
 ```
@@ -196,6 +197,10 @@ Authorization: Bearer <LEARND_API_TOKEN>
 Onboarding looks up the active student and school-class membership through
 `school-students/`, `school-class-students/`, and `school-classes/`, then patches
 the student's `discord_user_id`.
+
+The admin-only `/status` command reports the configured environment, version,
+learnd URL, public health reachability, authenticated API reachability, active
+years, class count, and Discord gateway latency without exposing credentials.
 
 The admin-only `/rollover` command reads `academic-years/` and `school-classes/`.
 It keeps and renames the newest archived year using the suffix `· arch. 25-26`,
