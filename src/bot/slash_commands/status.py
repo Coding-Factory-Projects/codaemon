@@ -43,6 +43,7 @@ def _format_status(status: learnd.LearndStatus, discord_latency_ms: int) -> str:
         school_class_count_label = str(school_class_count)
 
     learnd_url = settings.LEARND_BASE_URL or _("non configurée")
+    learnd_version = status["version"] or _("inconnue")
     return _(
         "**Codaemon**\n"
         "Version : `{version}`\n"
@@ -51,6 +52,7 @@ def _format_status(status: learnd.LearndStatus, discord_latency_ms: int) -> str:
         "Envoi d'onboarding : `{onboard_delivery}`\n"
         "Discord : disponible ({discord_latency_ms} ms)\n\n"
         "**learnd.sh**\n"
+        "Version : `{learnd_version}`\n"
         "URL : `{learnd_url}`\n"
         "Health : {health}\n"
         "API Bearer : {api}\n"
@@ -63,6 +65,7 @@ def _format_status(status: learnd.LearndStatus, discord_latency_ms: int) -> str:
         onboard_delivery=settings.ONBOARD_DELIVERY,
         discord_latency_ms=discord_latency_ms,
         learnd_url=learnd_url,
+        learnd_version=learnd_version,
         health=_health_label(status),
         api=_api_label(status),
         active_years=active_years_label,

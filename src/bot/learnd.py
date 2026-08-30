@@ -66,6 +66,7 @@ class _SchoolClass(TypedDict):
 
 
 class LearndStatus(TypedDict):
+    version: str | None
     health_ok: bool
     health_latency_ms: int | None
     api_status: Literal["ok", "missing_token", "unauthorized", "unreachable", "invalid"]
@@ -77,6 +78,7 @@ class LearndStatus(TypedDict):
 def check_status() -> LearndStatus:
     """Check learnd health and authenticated API access without exposing data."""
     result: LearndStatus = {
+        "version": None,
         "health_ok": False,
         "health_latency_ms": None,
         "api_status": "unreachable",
@@ -93,7 +95,12 @@ def check_status() -> LearndStatus:
         response = httpx.get(f"{base_url}/health", timeout=10)
         response.raise_for_status()
         result["health_ok"] = True
-    except httpx.HTTPError:
+        payload = response.json()
+        if isinstance(payload, dict):
+            version = payload.get("version")
+            if isinstance(version, str):
+                result["version"] = version
+    except (httpx.HTTPError, ValueError):
         pass
     result["health_latency_ms"] = round((time.monotonic() - started_at) * 1000)
 
