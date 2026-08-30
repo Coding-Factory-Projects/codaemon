@@ -29,6 +29,61 @@ CHANNEL_TEMPLATE = [
 ]
 
 
+class CategoryRenameError(Exception):
+    """Raised when a bulk category rename cannot be applied safely."""
+
+
+def bulk_rename_categories(renames: list[tuple[str, str]], apply: bool) -> None:
+    """Validate and optionally rename same-named Discord categories and roles."""
+    old_names = [old_name for old_name, _new_name in renames]
+    new_names = [new_name for _old_name, new_name in renames]
+    if len(old_names) != len(set(old_names)):
+        raise CategoryRenameError("CSV contains duplicate old_name values")
+    if len(new_names) != len(set(new_names)):
+        raise CategoryRenameError("CSV contains duplicate new_name values")
+
+    with discord.create_client() as client:
+        roles = _get_roles(client)
+        channels = discord.request(client, "GET", discord.channels_route()).json()
+        categories = [channel for channel in channels if channel["type"] == CATEGORY]
+        resources: list[tuple[dict, dict, str]] = []
+
+        for old_name, new_name in renames:
+            if old_name == new_name:
+                raise CategoryRenameError(f"Old and new names are identical: {old_name}")
+
+            matching_categories = [
+                category for category in categories if category["name"] == old_name
+            ]
+            matching_roles = [role for role in roles if role["name"] == old_name]
+            if len(matching_categories) != 1:
+                raise CategoryRenameError(
+                    f'Expected one category named "{old_name}", found {len(matching_categories)}'
+                )
+            if len(matching_roles) != 1:
+                raise CategoryRenameError(
+                    f'Expected one role named "{old_name}", found {len(matching_roles)}'
+                )
+            if any(category["name"] == new_name for category in categories):
+                raise CategoryRenameError(f'Category named "{new_name}" already exists')
+            if any(role["name"] == new_name for role in roles):
+                raise CategoryRenameError(f'Role named "{new_name}" already exists')
+
+            resources.append((matching_categories[0], matching_roles[0], new_name))
+
+        if not apply:
+            return
+
+        for category, role, new_name in resources:
+            discord.request(client, "PATCH", discord.role_route(role["id"]), {"name": new_name})
+            discord.request(
+                client,
+                "PATCH",
+                discord.channel_route(category["id"]),
+                {"name": new_name},
+            )
+
+
 def create_class_category(
     name: str, campus: str, existing_role_id: str | None = None
 ) -> tuple[str, str]:
