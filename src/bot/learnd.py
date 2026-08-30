@@ -1,7 +1,7 @@
-"""HTTP client for learnd (formerly TeachPilot), the roster system of record."""
+"""HTTP client for learnd, the roster system of record."""
 
 import json
-import logging
+from collections import defaultdict
 from typing import TypedDict
 
 import httpx
@@ -9,15 +9,19 @@ from django.conf import settings
 
 from config.constants import StudentBackend
 
-logger = logging.getLogger(__name__)
-
 
 class LearndError(Exception):
-    """The learnd service or fixture could not return a usable student."""
+    """The learnd service or fixture returned unusable data."""
 
 
 class StudentNotFound(LearndError):
-    """No student matches the supplied email address."""
+    """No active student matches the supplied email address."""
+
+
+class OnboardStudent(TypedDict):
+    first_name: str
+    last_name: str
+    discord_role_id: str
 
 
 class RolloverClass(TypedDict):
@@ -38,85 +42,166 @@ class RolloverData(TypedDict):
     archived_years: list[RolloverYear]
 
 
-def patch_student(email: str, discord_id: str) -> dict:
-    """Bind a Discord id to a student by email and read back their name + promotion role.
+class _SchoolStudent(TypedDict):
+    id: str
+    first_name: str
+    last_name: str
 
-    Mirrors the existing contract:
-        PATCH {LEARND_BASE_URL}/promotions/students  {email, discord_id}
-        -> {"firstName", "lastName", "promotion": {"discord_role_id"}}
-    """
+
+class _AcademicYear(TypedDict):
+    id: str
+    start_year: int
+    status: str
+
+
+class _SchoolClass(TypedDict):
+    id: str
+    name: str
+    campus: str
+    academic_year_id: str
+    academic_year_status: str
+    discord_role_id: str
+    discord_category_id: str
+
+
+def onboard_student(email: str, discord_user_id: str) -> OnboardStudent:
+    """Bind a Discord user ID to the active student matching an email address."""
     if settings.STUDENT_BACKEND == StudentBackend.FIXTURE:
-        return _fixture_student(email, discord_id)
+        return _fixture_student(email)
 
-    url = f"{settings.LEARND_BASE_URL.rstrip('/')}/promotions/students"
-    try:
-        resp = httpx.patch(
-            url,
-            json={"email": email, "discord_id": discord_id},
-            headers={settings.SHARED_SECRET_HEADER: settings.LEARND_SHARED_SECRET},
-            timeout=30,
-        )
-        if resp.status_code == 404:
-            raise StudentNotFound(email)
-        resp.raise_for_status()
-        student = resp.json()
-    except StudentNotFound:
-        raise
-    except (httpx.HTTPError, ValueError) as exc:
-        raise LearndError("learnd request failed") from exc
-    return _validate_student(student, "discord_role_id")
+    students = _get_collection(
+        "/school-students/",
+        params={"email": email, "academic_year_status": "active"},
+    )
+    if not students:
+        raise StudentNotFound(email)
+    if len(students) != 1:
+        raise LearndError("learnd returned multiple active students for the email")
+    student = _validate_school_student(students[0])
 
+    memberships = _get_collection(
+        "/school-class-students/",
+        params={"student": student["id"], "academic_year_status": "active"},
+    )
+    if len(memberships) != 1:
+        raise LearndError("learnd student must belong to exactly one active school class")
+    membership = memberships[0]
+    if not isinstance(membership, dict):
+        raise LearndError("learnd returned an invalid school class membership")
+    school_class_id = _required_string(membership, "school_class")
 
-def fetch_rollover() -> RolloverData:
-    """Fetch the active and archived school years used by the rollover command."""
-    url = f"{settings.LEARND_BASE_URL.rstrip('/')}/discord/rollover"
-    try:
-        response = httpx.get(
-            url,
-            headers={settings.SHARED_SECRET_HEADER: settings.LEARND_SHARED_SECRET},
-            timeout=30,
-        )
-        response.raise_for_status()
-        payload = response.json()
-    except (httpx.HTTPError, ValueError) as exc:
-        raise LearndError("learnd rollover request failed") from exc
-    if not isinstance(payload, dict):
-        raise LearndError("learnd rollover response must be an object")
-    active_year = _validate_rollover_year(payload.get("active_year"))
-    archived = payload.get("archived_years")
-    if not isinstance(archived, list):
-        raise LearndError("learnd rollover response is missing archived_years")
+    school_classes = _get_collection("/school-classes/", params={"id": school_class_id})
+    if len(school_classes) != 1:
+        raise LearndError("learnd did not return the student's active school class")
+    school_class = _validate_school_class(school_classes[0])
+    if not school_class["discord_role_id"]:
+        raise LearndError("learnd school class has no Discord role ID")
+
+    _request(
+        "PATCH",
+        f"/school-students/{student['id']}/",
+        json={"discord_user_id": discord_user_id},
+    )
     return {
-        "active_year": active_year,
-        "archived_years": [_validate_rollover_year(year) for year in archived],
+        "first_name": student["first_name"],
+        "last_name": student["last_name"],
+        "discord_role_id": school_class["discord_role_id"],
     }
 
 
-def patch_school_class_discord_ids(school_class_id: str, role_id: str, category_id: str) -> None:
-    """Persist Discord resource ids after rollover provisioning."""
-    url = f"{settings.LEARND_BASE_URL.rstrip('/')}/discord/school-classes/{school_class_id}"
-    try:
-        response = httpx.patch(
-            url,
-            json={"discord_role_id": role_id, "discord_category_id": category_id},
-            headers={settings.SHARED_SECRET_HEADER: settings.LEARND_SHARED_SECRET},
-            timeout=30,
+def fetch_rollover() -> RolloverData:
+    """Fetch active and archived academic years and their school classes."""
+    academic_years = [
+        _validate_academic_year(value) for value in _get_collection("/academic-years/")
+    ]
+    active_years = [year for year in academic_years if year["status"] == "active"]
+    if len(active_years) != 1:
+        raise LearndError("learnd must return exactly one active academic year")
+
+    classes_by_year: defaultdict[str, list[RolloverClass]] = defaultdict(list)
+    for value in _get_collection("/school-classes/"):
+        school_class = _validate_school_class(value)
+        if school_class["academic_year_status"] not in {"active", "archived"}:
+            continue
+        classes_by_year[school_class["academic_year_id"]].append(
+            {
+                "id": school_class["id"],
+                "name": school_class["name"],
+                "campus": school_class["campus"],
+                "discord_role_id": school_class["discord_role_id"],
+                "discord_category_id": school_class["discord_category_id"],
+            }
         )
-        response.raise_for_status()
-    except httpx.HTTPError as exc:
-        raise LearndError("learnd class update failed") from exc
+
+    active_year = active_years[0]
+    archived_years = [year for year in academic_years if year["status"] == "archived"]
+    return {
+        "active_year": {
+            "start_year": active_year["start_year"],
+            "school_classes": classes_by_year[active_year["id"]],
+        },
+        "archived_years": [
+            {
+                "start_year": year["start_year"],
+                "school_classes": classes_by_year[year["id"]],
+            }
+            for year in archived_years
+        ],
+    }
+
+
+def patch_school_class_discord_ids(
+    school_class_id: str,
+    role_id: str,
+    category_id: str,
+) -> None:
+    """Persist Discord resource IDs after rollover provisioning."""
+    _request(
+        "PATCH",
+        f"/school-classes/{school_class_id}/",
+        json={"discord_role_id": role_id, "discord_category_id": category_id},
+    )
 
 
 def fixture_promotion_names() -> list[str]:
     """Return every promotion role name declared by the test fixture."""
     return [
-        _validate_student(student, "discord_role_name")["promotion"]["discord_role_name"]
+        _validate_fixture_student(student)["discord_role_id"]
         for student in _read_fixture().values()
     ]
 
 
-def _fixture_student(email: str, discord_id: str) -> dict:
-    """Load one student from the test fixture, re-reading it for every request."""
+def _request(
+    method: str,
+    path: str,
+    *,
+    params: dict[str, str] | None = None,
+    json: dict[str, str] | None = None,
+) -> object:
+    url = f"{settings.LEARND_BASE_URL.rstrip('/')}/api/v1{path}"
+    try:
+        response = httpx.request(
+            method,
+            url,
+            params=params,
+            json=json,
+            headers={"Authorization": f"Bearer {settings.LEARND_API_TOKEN}"},
+            timeout=30,
+        )
+        response.raise_for_status()
+        return response.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        raise LearndError("learnd request failed") from exc
+
+
+def _get_collection(path: str, *, params: dict[str, str] | None = None) -> list[object]:
+    payload = _request("GET", path, params=params)
+    if not isinstance(payload, list):
+        raise LearndError("learnd collection response must be a list")
+    return payload
+
+
+def _fixture_student(email: str) -> OnboardStudent:
     fixture = _read_fixture()
     normalized_email = email.strip().casefold()
     student = next(
@@ -129,57 +214,7 @@ def _fixture_student(email: str, discord_id: str) -> dict:
     )
     if student is None:
         raise StudentNotFound(email)
-
-    logger.info("Fixture matched %s to Discord member %s", email, discord_id)
-    return _validate_student(student, "discord_role_name")
-
-
-def _validate_rollover_year(value: object) -> RolloverYear:
-    if not isinstance(value, dict):
-        raise LearndError("learnd rollover response contains an invalid year")
-    start_year = value.get("start_year")
-    school_classes = value.get("school_classes")
-    if not isinstance(start_year, int):
-        raise LearndError("learnd rollover year is missing start_year")
-    if not isinstance(school_classes, list):
-        raise LearndError("learnd rollover year is missing school_classes")
-    return {
-        "start_year": start_year,
-        "school_classes": [_validate_rollover_class(item) for item in school_classes],
-    }
-
-
-def _validate_rollover_class(value: object) -> RolloverClass:
-    if not isinstance(value, dict):
-        raise LearndError("learnd rollover response contains an invalid class")
-    school_class_id = value.get("id")
-    name = value.get("name")
-    campus = value.get("campus")
-    role_id = value.get("discord_role_id")
-    category_id = value.get("discord_category_id")
-    if not isinstance(school_class_id, str):
-        raise LearndError("learnd rollover class is missing id")
-    if not isinstance(name, str):
-        raise LearndError("learnd rollover class is missing name")
-    if not isinstance(campus, str):
-        raise LearndError("learnd rollover class is missing campus")
-    if not isinstance(role_id, str):
-        raise LearndError("learnd rollover class is missing discord_role_id")
-    if not isinstance(category_id, str):
-        raise LearndError("learnd rollover class is missing discord_category_id")
-    if not school_class_id.strip():
-        raise LearndError("learnd rollover class contains empty required fields")
-    if not name.strip():
-        raise LearndError("learnd rollover class contains empty required fields")
-    if not campus.strip():
-        raise LearndError("learnd rollover class contains empty required fields")
-    return {
-        "id": school_class_id.strip(),
-        "name": name.strip(),
-        "campus": campus.strip(),
-        "discord_role_id": role_id.strip(),
-        "discord_category_id": category_id.strip(),
-    }
+    return _validate_fixture_student(student)
 
 
 def _read_fixture() -> dict[str, object]:
@@ -187,38 +222,76 @@ def _read_fixture() -> dict[str, object]:
         fixture = json.loads(settings.LEARND_FIXTURE_PATH.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise LearndError(f"cannot read fixture {settings.LEARND_FIXTURE_PATH}") from exc
-
     if not isinstance(fixture, dict):
         raise LearndError("student fixture must be a JSON object")
     return fixture
 
 
-def _validate_student(student: object, role_key: str) -> dict:
-    if not isinstance(student, dict):
-        raise LearndError("student response must be an object")
-    promotion = student.get("promotion")
+def _validate_fixture_student(value: object) -> OnboardStudent:
+    if not isinstance(value, dict):
+        raise LearndError("student fixture entry must be an object")
+    promotion = value.get("promotion")
     if not isinstance(promotion, dict):
-        raise LearndError("student response is missing promotion")
-
-    first_name = student.get("firstName")
-    last_name = student.get("lastName")
-    role = promotion.get(role_key)
-
-    if not isinstance(first_name, str):
-        raise LearndError("student response contains invalid fields")
-    if not first_name.strip():
-        raise LearndError("student response contains invalid fields")
-    if not isinstance(last_name, str):
-        raise LearndError("student response contains invalid fields")
-    if not last_name.strip():
-        raise LearndError("student response contains invalid fields")
-    if not isinstance(role, str):
-        raise LearndError("student response contains invalid fields")
-    if not role.strip():
-        raise LearndError("student response contains invalid fields")
-
+        raise LearndError("student fixture entry is missing promotion")
     return {
-        "firstName": first_name.strip(),
-        "lastName": last_name.strip(),
-        "promotion": {role_key: role.strip()},
+        "first_name": _required_string(value, "firstName"),
+        "last_name": _required_string(value, "lastName"),
+        "discord_role_id": _required_string(promotion, "discord_role_name"),
     }
+
+
+def _validate_school_student(value: object) -> _SchoolStudent:
+    if not isinstance(value, dict):
+        raise LearndError("learnd returned an invalid school student")
+    return {
+        "id": _required_string(value, "id"),
+        "first_name": _required_string(value, "first_name"),
+        "last_name": _required_string(value, "last_name"),
+    }
+
+
+def _validate_academic_year(value: object) -> _AcademicYear:
+    if not isinstance(value, dict):
+        raise LearndError("learnd returned an invalid academic year")
+    start_year = value.get("start_year")
+    if not isinstance(start_year, int):
+        raise LearndError("learnd academic year has an invalid start year")
+    status = _required_string(value, "status")
+    if status not in {"planned", "active", "archived"}:
+        raise LearndError("learnd academic year has an invalid status")
+    return {
+        "id": _required_string(value, "id"),
+        "start_year": start_year,
+        "status": status,
+    }
+
+
+def _validate_school_class(value: object) -> _SchoolClass:
+    if not isinstance(value, dict):
+        raise LearndError("learnd returned an invalid school class")
+    status = _required_string(value, "academic_year_status")
+    if status not in {"planned", "active", "archived"}:
+        raise LearndError("learnd school class has an invalid academic year status")
+    return {
+        "id": _required_string(value, "id"),
+        "name": _required_string(value, "name"),
+        "campus": _required_string(value, "campus_name"),
+        "academic_year_id": _required_string(value, "academic_year"),
+        "academic_year_status": status,
+        "discord_role_id": _string(value, "discord_role_id"),
+        "discord_category_id": _string(value, "discord_category_id"),
+    }
+
+
+def _required_string(value: dict, key: str) -> str:
+    result = _string(value, key)
+    if not result:
+        raise LearndError(f"learnd response field {key} must not be empty")
+    return result
+
+
+def _string(value: dict, key: str) -> str:
+    result = value.get(key)
+    if not isinstance(result, str):
+        raise LearndError(f"learnd response field {key} must be a string")
+    return result.strip()

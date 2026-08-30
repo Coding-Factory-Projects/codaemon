@@ -66,7 +66,7 @@ def complete_onboard(token: str) -> str:
         raise OnboardError(_("Veuillez utiliser une adresse email autorisée."))
 
     try:
-        student = learnd.patch_student(email, user_id)
+        student = learnd.onboard_student(email, user_id)
     except learnd.StudentNotFound:
         raise OnboardError(_("Aucun étudiant ne correspond à cette adresse email.")) from None
     except learnd.LearndError:
@@ -74,9 +74,9 @@ def complete_onboard(token: str) -> str:
         raise OnboardError(_("Le service étudiant est temporairement indisponible.")) from None
 
     try:
-        nickname = f"{student['firstName']} {student['lastName'].upper()}"
+        nickname = f"{student['first_name']} {student['last_name'].upper()}"
         if settings.STUDENT_BACKEND == StudentBackend.FIXTURE:
-            promotion_name = student["promotion"]["discord_role_name"]
+            promotion_name = student["discord_role_id"]
             role_ids = testing_roles.resolve_testing_roles([promotion_name])
             base_role_id = role_ids["Base"]
             guest_role_id = role_ids["Guest"]
@@ -84,7 +84,7 @@ def complete_onboard(token: str) -> str:
         else:
             base_role_id = settings.DISCORD_BASE_ROLE_ID
             guest_role_id = settings.DISCORD_GUEST_ROLE_ID
-            promotion_role_id = student["promotion"]["discord_role_id"]
+            promotion_role_id = student["discord_role_id"]
 
         members.apply_onboard(
             user_id,

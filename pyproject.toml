@@ -9,7 +9,6 @@ description = "Discord bot that manages the Coding Factory school server"
 requires-python = ">=3.13"
 dependencies = [
     "django==6.0.8",
-    "django-ninja>=1.6.2",
     "django-environ>=0.14",
     "discord.py>=2.7.1",
     "httpx>=0.28.1",

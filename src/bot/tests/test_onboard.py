@@ -37,11 +37,11 @@ def test_onboard_rejects_bad_domain(client):
 @pytest.mark.django_db
 def test_onboard_happy_path(client, monkeypatch):
     monkeypatch.setattr(
-        "bot.learnd.patch_student",
+        "bot.learnd.onboard_student",
         lambda email, user_id: {
-            "firstName": "Jean",
-            "lastName": "Dupont",
-            "promotion": {"discord_role_id": "77"},
+            "first_name": "Jean",
+            "last_name": "Dupont",
+            "discord_role_id": "77",
         },
     )
     calls = {}

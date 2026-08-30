@@ -11,8 +11,7 @@ def _test_settings(settings):
         "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
     }
     settings.ALLOWED_HOSTS = ["testserver"]
-    settings.LEARND_SHARED_SECRET = "topsecret"
-    settings.SHARED_SECRET_HEADER = "X-Shared-Secret"
+    settings.LEARND_API_TOKEN = "topsecret"
     settings.ALLOWED_EMAIL_DOMAINS = ["edu.esiee-it.fr"]
     settings.STUDENT_BACKEND = StudentBackend.LEARND
     settings.ONBOARD_DELIVERY = OnboardDelivery.EMAIL

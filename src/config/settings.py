@@ -116,8 +116,7 @@ DISCORD_EVERYONE_ROLE_ID = env("DISCORD_EVERYONE_ROLE_ID", default=DISCORD_GUILD
 
 # --- Integration (learnd, formerly TeachPilot) ---
 LEARND_BASE_URL = env("LEARND_BASE_URL", default="")
-LEARND_SHARED_SECRET = env("LEARND_SHARED_SECRET", default="")
-SHARED_SECRET_HEADER = env("SHARED_SECRET_HEADER", default="X-Shared-Secret")
+LEARND_API_TOKEN = env("LEARND_API_TOKEN", default="")
 
 try:
     STUDENT_BACKEND = StudentBackend(env("STUDENT_BACKEND", default=StudentBackend.LEARND))

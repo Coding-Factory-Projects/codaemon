@@ -13,9 +13,9 @@ Two processes from one image (Design A):
 
 ```
   web (gunicorn / WSGI)        runbot (discord.py gateway)
-  - /on-promotion-created      - /createcategory  (admin)
-  - /onboard (confirm page)    - /deletecategory  (admin)
-  - /healthz                   - /renamecategory  (admin)
+  - /onboard (confirm page)    - /createcategory  (admin)
+  - /healthz                   - /deletecategory  (admin)
+                               - /renamecategory  (admin)
                                - /rollover        (admin)
                                - /onboard         (students)
         \__ both call bot/discord_api/ (Discord REST) __/
@@ -23,8 +23,8 @@ Two processes from one image (Design A):
 
 - The **gateway** worker handles slash commands (it makes an *outbound* WebSocket
   to Discord — Discord never needs codaemon's URL).
-- The **web** process handles the learnd webhook + the onboarding page, and calls
-  Discord over REST. No async needed there.
+- The **web** process handles the onboarding page and calls Discord and learnd
+  over REST. No async needed there.
 
 ## Fixture-backed onboarding
 
@@ -166,18 +166,16 @@ Create the `int` **Environment** with these secrets:
 |---|---|
 | `SSH_HOST` / `SSH_USER` / `SSH_KEY` | deploy SSH target (dedicated key) |
 | `SSH_FINGERPRINT` | SHA256 host-key fingerprint for `gryt-int` |
-| `DOTENV` | secret `.env` values for int (Discord, `LEARND_SHARED_SECRET`, and SMTP credentials) |
+| `DOTENV` | secret `.env` values for int (Discord, `LEARND_API_TOKEN`, and SMTP credentials) |
 
 Static int configuration, including non-secret SMTP settings, lives in
-`.github/environments/int.env`. Until LearnD is deployed, int uses the fixture
-backend with email delivery. Each int deployment copies the tracked
-`fixtures/students.example.json` to `/srv/codaemon-int/fixtures/students.json`
-before Compose updates the services. Change `STUDENT_BACKEND` to `learnd` once
-the integration is available.
+`.github/environments/int.env` and uses learnd with email delivery. Each int
+deployment still copies `fixtures/students.example.json` to the server so the
+fixture backend remains available.
 
 Create the `prod` **Environment** with the same four secrets, pointed at
 `gryt-coding` and the production credentials. Production's `DOTENV` must include
-the Discord credentials, `DJANGO_SECRET_KEY`, `LEARND_SHARED_SECRET`, and SMTP
+the Discord credentials, `DJANGO_SECRET_KEY`, `LEARND_API_TOKEN`, and SMTP
 credentials. Static production configuration lives in
 `.github/environments/prod.env` and uses LearnD with email delivery.
 
@@ -189,75 +187,19 @@ refuses deployment unless that exact commit has a successful int workflow run.
 
 ## learnd contract
 
-- learnd → codaemon: `POST /on-promotion-created {name, campus}` (+ `X-Shared-Secret`)
-  → `{roleId, categoryId}`
-- codaemon → learnd: `PATCH /promotions/students {email, discord_id}` (+ `X-Shared-Secret`)
-  → `{firstName, lastName, promotion: {discord_role_id}}`
-
-The shared secret is required in **both** directions from day one.
-
-### Academic-year rollover support required in LearnD
-
-`SchoolClass` must store the Discord category alongside its existing role:
-
-```python
-discord_category_id = models.CharField(
-    _("discord category id"),
-    max_length=255,
-    blank=True,
-)
-```
-
-When LearnD handles `/on-promotion-created`, it must persist both `roleId` and
-`categoryId` on the class.
-
-LearnD must expose these shared-secret-protected endpoints to codaemon:
+Codaemon authenticates to `LEARND_BASE_URL/api/v1/` with:
 
 ```http
-GET /discord/rollover
+Authorization: Bearer <LEARND_API_TOKEN>
 ```
 
-```json
-{
-  "active_year": {
-    "start_year": 2026,
-    "school_classes": [
-      {
-        "id": "class-1",
-        "name": "B1",
-        "campus": "Paris",
-        "discord_role_id": "123",
-        "discord_category_id": "456"
-      }
-    ]
-  },
-  "archived_years": [
-    {
-      "start_year": 2025,
-      "school_classes": []
-    }
-  ]
-}
-```
+Onboarding looks up the active student and school-class membership through
+`school-students/`, `school-class-students/`, and `school-classes/`, then patches
+the student's `discord_user_id`.
 
-`archived_years` must contain every archived year, newest or oldest first; the
-bot sorts them by `start_year`. Empty Discord IDs are valid for resources that
-have not been provisioned yet. Campus is its display name, not its ID.
-
-```http
-PATCH /discord/school-classes/{id}
-```
-
-```json
-{
-  "discord_role_id": "123",
-  "discord_category_id": "456"
-}
-```
-
-The admin-only `/rollover` command queries these endpoints. It keeps and renames
-the newest archived year using the suffix `· arch. 25-26`, deletes categories,
-child channels, and roles for every older archived year, then idempotently
-creates or completes the active year's Discord resources. Run it first with
-`dry_run:true`; `dry_run:false` applies the plan and updates its ephemeral
-response with progress for each class.
+The admin-only `/rollover` command reads `academic-years/` and `school-classes/`.
+It keeps and renames the newest archived year using the suffix `· arch. 25-26`,
+deletes categories, child channels, and roles for every older archived year,
+then idempotently creates or completes the active year's Discord resources and
+patches their Discord IDs back to `school-classes/{id}/`. Run it first with
+`dry_run:true`; `dry_run:false` applies the plan and reports progress.

@@ -27,8 +27,7 @@ discord_product_owners_role_id: ""
 
 # LearnD
 learnd_base_url: ""
-learnd_shared_secret: ""
-shared_secret_header: X-Shared-Secret
+learnd_api_token: ""
 
 # Email
 email_host: smtp.eu.mailgun.org
