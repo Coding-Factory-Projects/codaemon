@@ -17,13 +17,15 @@ database_path: "{{ project_root }}/data/db.sqlite3"
 
 # Discord
 discord_token: >-
-  {{ lookup('ansible.builtin.pipe', 'op read "op://Private/Discord/codaemon-dev/bot token"') }}
+  {{ lookup('ansible.builtin.pipe', 'op read "op://Private/Discord ROBIN/codaemon-dev/bot token"') }}
 discord_client_id: ""
 discord_guild_id: "1537805165837549629"
 discord_admin_role_id: ""
 discord_base_role_id: ""
 discord_guest_role_id: ""
 discord_product_owners_role_id: ""
+discord_support_user_id: "373017678597586944"
+discord_support_channel_id: ""
 
 # LearnD
 learnd_base_url: ""

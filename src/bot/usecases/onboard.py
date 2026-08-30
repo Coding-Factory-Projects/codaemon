@@ -1,6 +1,7 @@
 """Request and complete the student onboard flow."""
 
 import logging
+import secrets
 from typing import TypedDict
 
 import httpx
@@ -11,7 +12,7 @@ from django.utils.translation import gettext as _
 
 from bot import email as outbound_email
 from bot import learnd
-from bot.discord_api import members, testing_roles
+from bot.discord_api import members, support, testing_roles
 from bot.models import OnboardingLog
 from config.constants import OnboardDelivery, StudentBackend
 
@@ -45,9 +46,15 @@ def request_onboard(discord_id: str | int, email: str) -> str | None:
 
     try:
         outbound_email.send_onboard_email(normalized_email, link)
-    except Exception:
+    except Exception as exc:
         logger.exception("onboard email failed")
-        raise OnboardError(_("L'email de confirmation n'a pas pu être envoyé.")) from None
+        raise _reported_error(
+            discord_id=str(discord_id),
+            email=normalized_email,
+            stage="envoi de l'email",
+            student_message=_("Codaemon n'a pas pu envoyer l'email de confirmation."),
+            cause=exc,
+        ) from None
     return None
 
 
@@ -69,9 +76,15 @@ def complete_onboard(token: str) -> str:
         student = learnd.onboard_student(email, user_id)
     except learnd.StudentNotFound:
         raise OnboardError(_("Aucun étudiant ne correspond à cette adresse email.")) from None
-    except learnd.LearndError:
+    except learnd.LearndError as exc:
         logger.exception("learnd lookup failed for %s", email)
-        raise OnboardError(_("Le service étudiant est temporairement indisponible.")) from None
+        raise _reported_error(
+            discord_id=user_id,
+            email=email,
+            stage="service étudiant",
+            student_message=_("Codaemon n'a pas pu contacter le service étudiant."),
+            cause=exc,
+        ) from None
 
     try:
         nickname = f"{student['first_name']} {student['last_name'].upper()}"
@@ -92,9 +105,15 @@ def complete_onboard(token: str) -> str:
             add_role_ids=[base_role_id, promotion_role_id],
             remove_role_ids=[guest_role_id],
         )
-    except (testing_roles.TestRoleError, httpx.HTTPError):
+    except (testing_roles.TestRoleError, httpx.HTTPError) as exc:
         logger.exception("Discord onboarding failed for member %s", user_id)
-        raise OnboardError(_("Discord n'a pas pu mettre à jour votre profil.")) from None
+        raise _reported_error(
+            discord_id=user_id,
+            email=email,
+            stage="mise à jour Discord",
+            student_message=_("Codaemon n'a pas pu mettre à jour ton profil Discord."),
+            cause=exc,
+        ) from None
 
     OnboardingLog.objects.create(
         discord_user_id=user_id,
@@ -113,3 +132,20 @@ def make_token(discord_id: str | int, email: str) -> str:
 def read_token(token: str, max_age: int = DEFAULT_MAX_AGE) -> OnboardToken:
     """Read a valid onboard token or raise ``BadSignature``."""
     return signing.loads(token, salt=SALT, max_age=max_age)
+
+
+def _reported_error(
+    discord_id: str,
+    email: str,
+    stage: str,
+    student_message: str,
+    cause: Exception,
+) -> OnboardError:
+    reference = f"CODAEMON-{secrets.token_hex(3).upper()}"
+    support.report_onboard_failure(reference, discord_id, email, stage, cause)
+    return OnboardError(
+        _("{message} Un administrateur a été prévenu. Erreur : {reference}").format(
+            message=student_message,
+            reference=reference,
+        )
+    )

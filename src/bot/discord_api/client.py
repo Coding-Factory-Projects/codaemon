@@ -49,6 +49,10 @@ def channel_route(channel_id: str) -> str:
     return f"/channels/{channel_id}"
 
 
+def channel_messages_route(channel_id: str) -> str:
+    return f"/channels/{channel_id}/messages"
+
+
 def member_route(user_id: str) -> str:
     return f"/guilds/{_guild_id()}/members/{user_id}"
 

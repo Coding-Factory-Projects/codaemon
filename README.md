@@ -59,7 +59,8 @@ cp fixtures/students.example.json fixtures/students.json
 `make dev` renders `.env` with Ansible. The only development secret, the Discord
 bot token, is read from `op://Private/Discord/codaemon-dev/bot token`; sign in to
 the 1Password CLI first. Non-secret development configuration lives in
-`ansible/vars/dev.yml`; rerun `make dev` after changing it.
+`ansible/vars/dev.yml`; rerun `make dev` after changing it. Set
+`discord_support_channel_id` there to receive onboarding failure reports.
 
 With the fixture backend, role IDs can remain empty. Start the two processes:
 
@@ -167,7 +168,7 @@ Create the `int` **Environment** with these secrets:
 |---|---|
 | `SSH_HOST` / `SSH_USER` / `SSH_KEY` | deploy SSH target (dedicated key) |
 | `SSH_FINGERPRINT` | SHA256 host-key fingerprint for `gryt-int` |
-| `DOTENV` | secret `.env` values for int (Discord, `LEARND_API_TOKEN`, and SMTP credentials) |
+| `DOTENV` | secret `.env` values for int (Discord, `LEARND_API_TOKEN`, SMTP credentials, and `DISCORD_SUPPORT_CHANNEL_ID`) |
 
 Static int configuration, including non-secret SMTP settings, lives in
 `.github/environments/int.env` and uses learnd with email delivery. Each int

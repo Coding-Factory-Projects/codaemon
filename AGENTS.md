@@ -28,6 +28,7 @@
 
 ## Code Conventions
 
+- Write the project name `learnd` in lowercase at all times.
 - Add type hints to function and method signatures.
 - In modules, place public functions near the top and private helpers below them.
 - In usecase modules, place supporting types immediately above the first public function that uses them, grouping them
