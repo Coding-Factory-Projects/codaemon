@@ -117,7 +117,7 @@ def reconcile_class_category(
     campus: str,
     role_id: str,
     category_id: str,
-) -> tuple[str, str]:
+) -> tuple[str, str, str]:
     """Create or complete the active Discord resources for one learnd class."""
     class_name = _class_name(name, campus)
     with discord.create_client() as client:
@@ -132,8 +132,8 @@ def reconcile_class_category(
             category = _find_category(client, class_name)
         if category is None:
             category = _create_category(client, class_name, role["id"])
-        _ensure_channels(client, category["id"])
-        return role["id"], category["id"]
+        text_channel_id = _ensure_channels(client, category["id"])
+        return role["id"], category["id"], text_channel_id
 
 
 def archive_class_resources(
@@ -314,28 +314,35 @@ def _create_category(client: httpx.Client, name: str, role_id: str | None) -> di
     ).json()
 
 
-def _ensure_channels(client: httpx.Client, parent_id: str) -> None:
+def _ensure_channels(client: httpx.Client, parent_id: str) -> str:
     existing_channels = discord.request(client, "GET", discord.channels_route()).json()
+    text_channel_id = ""
     for channel in CHANNEL_TEMPLATE:
         channel_type = CHANNEL_TYPE[channel["type"]]
-        exists = any(
-            existing.get("parent_id") == str(parent_id)
-            and existing["name"] == channel["name"]
-            and existing["type"] == channel_type
-            for existing in existing_channels
+        resource = next(
+            (
+                existing
+                for existing in existing_channels
+                if existing.get("parent_id") == str(parent_id)
+                and existing["name"] == channel["name"]
+                and existing["type"] == channel_type
+            ),
+            None,
         )
-        if exists:
-            continue
-        discord.request(
-            client,
-            "POST",
-            discord.channels_route(),
-            {
-                "name": channel["name"],
-                "type": channel_type,
-                "parent_id": parent_id,
-            },
-        )
+        if resource is None:
+            resource = discord.request(
+                client,
+                "POST",
+                discord.channels_route(),
+                {
+                    "name": channel["name"],
+                    "type": channel_type,
+                    "parent_id": parent_id,
+                },
+            ).json()
+        if channel["name"] == "general":
+            text_channel_id = resource["id"]
+    return text_channel_id
 
 
 def _delete_category(client: httpx.Client, category_id: str) -> None:

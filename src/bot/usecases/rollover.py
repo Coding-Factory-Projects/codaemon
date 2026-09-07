@@ -75,7 +75,7 @@ def run(dry_run: bool, progress: Callable[[str], None] | None = None) -> str:
                 campus=school_class["campus"],
             ),
         )
-        role_id, category_id = discord_categories.reconcile_class_category(
+        role_id, category_id, text_channel_id = discord_categories.reconcile_class_category(
             school_class["name"],
             school_class["campus"],
             school_class["discord_role_id"],
@@ -83,8 +83,11 @@ def run(dry_run: bool, progress: Callable[[str], None] | None = None) -> str:
         )
         if role_id == school_class["discord_role_id"]:
             if category_id == school_class["discord_category_id"]:
-                continue
-        learnd.patch_school_class_discord_ids(school_class["id"], role_id, category_id)
+                if text_channel_id == school_class["discord_text_channel_id"]:
+                    continue
+        learnd.patch_school_class_discord_ids(
+            school_class["id"], role_id, category_id, text_channel_id
+        )
 
     retained_count = len(retained_year["school_classes"]) if retained_year else 0
     purged_count = sum(len(year["school_classes"]) for year in purged_years)

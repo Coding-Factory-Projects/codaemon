@@ -117,6 +117,7 @@ DISCORD_SUPPORT_CHANNEL_ID = env("DISCORD_SUPPORT_CHANNEL_ID", default="")
 DISCORD_EVERYONE_ROLE_ID = env("DISCORD_EVERYONE_ROLE_ID", default=DISCORD_GUILD_ID)
 
 # --- Integration (learnd, formerly TeachPilot) ---
+CODAEMON_API_TOKEN = env("CODAEMON_API_TOKEN", default="")
 LEARND_BASE_URL = env("LEARND_BASE_URL", default="")
 LEARND_API_TOKEN = env("LEARND_API_TOKEN", default="")
 

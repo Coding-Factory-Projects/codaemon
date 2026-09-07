@@ -27,7 +27,8 @@ discord_product_owners_role_id: ""
 discord_support_user_id: "373017678597586944"
 discord_support_channel_id: ""
 
-# LearnD
+# learnd integration
+codaemon_api_token: ""
 learnd_base_url: ""
 learnd_api_token: ""
 

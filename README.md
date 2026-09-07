@@ -15,6 +15,7 @@ Two processes from one image (Design A):
   web (gunicorn / WSGI)        runbot (discord.py gateway)
   - /onboard (confirm page)    - /createcategory  (admin)
   - /healthz                   - /deletecategory  (admin)
+  - /broadcast (service API)
                                - /renamecategory  (admin)
                                - /rollover        (admin)
                                - /status          (admin)
@@ -168,7 +169,7 @@ Create the `int` **Environment** with these secrets:
 |---|---|
 | `SSH_HOST` / `SSH_USER` / `SSH_KEY` | deploy SSH target (dedicated key) |
 | `SSH_FINGERPRINT` | SHA256 host-key fingerprint for `gryt-int` |
-| `DOTENV` | secret `.env` values for int (Discord, `LEARND_API_TOKEN`, SMTP credentials, and `DISCORD_SUPPORT_CHANNEL_ID`) |
+| `DOTENV` | secret `.env` values for int (Discord, `LEARND_API_TOKEN`, `CODAEMON_API_TOKEN`, SMTP credentials, and `DISCORD_SUPPORT_CHANNEL_ID`) |
 
 Static int configuration, including non-secret SMTP settings, lives in
 `.github/environments/int.env` and uses learnd with email delivery. Each int
@@ -177,7 +178,7 @@ fixture backend remains available.
 
 Create the `prod` **Environment** with the same four secrets, pointed at
 `gryt-coding` and the production credentials. Production's `DOTENV` must include
-the Discord credentials, `DJANGO_SECRET_KEY`, `LEARND_API_TOKEN`, and SMTP
+the Discord credentials, `DJANGO_SECRET_KEY`, `LEARND_API_TOKEN`, `CODAEMON_API_TOKEN`, and SMTP
 credentials. Static production configuration lives in
 `.github/environments/prod.env` and uses LearnD with email delivery.
 
@@ -209,3 +210,52 @@ deletes categories, child channels, and roles for every older archived year,
 then idempotently creates or completes the active year's Discord resources and
 patches their Discord IDs back to `school-classes/{id}/`. Run it first with
 `dry_run:true`; `dry_run:false` applies the plan and reports progress.
+
+School-class responses must include `discord_role_id`, `discord_category_id`,
+and `discord_text_channel_id` as strings (empty when not provisioned). Rollover
+identifies or creates the category's `general` text channel and patches all three
+IDs whenever any changes, including when only the text-channel ID is missing.
+The student API payload is unchanged by learnd storing Discord identity on User.
+
+## Class broadcasting
+
+learnd calls synchronous `POST /broadcast` with
+`Authorization: Bearer <CODAEMON_API_TOKEN>` and `Content-Type: application/json`:
+
+```json
+{
+  "discord_text_channel_id": "123",
+  "discord_role_id": "456",
+  "subject": "Class announcement",
+  "message": "The session starts at 09:00.",
+  "sender": {
+    "discord_user_id": "789",
+    "first_name": "Ada",
+    "last_name": "Lovelace",
+    "email": "ada@example.com"
+  }
+}
+```
+
+Configure a separate, high-entropy `CODAEMON_API_TOKEN` shared with learnd; it is
+not `LEARND_API_TOKEN` (which authenticates outbound requests). Missing or empty
+configuration rejects all broadcasts. Local Ansible uses `codaemon_api_token`,
+empty by default; deployed environments supply it through the secret `DOTENV`.
+
+All fields are required strings. Discord IDs contain ASCII digits; subject and
+message must be nonempty after trimming. At least one sender name must be
+nonempty, and email must be valid. learnd must derive sender metadata server-side;
+codaemon trusts the authenticated service and never displays the email.
+
+Content is `<@&role_id>`, a blank line, `**subject**`, a blank line, the message,
+a blank line, then `First Last (<@sender_id>)`. Final content over 2,000 characters
+is rejected before sending. Only the specified class role is allowed to notify:
+user mentions (including the clickable sender), other roles, `@everyone`, and
+`@here` do not ping.
+
+Success returns HTTP 201 with `{"discord_message_id":"..."}`. Validation errors
+return 400, invalid authentication 401, non-POST methods 405, and Discord/provider
+or transport failures 502. Error JSON uses `{"error":"..."}` (405 uses Django's
+standard method-not-allowed response). Provider errors are sanitized. Delivery
+uses the existing synchronous Discord REST client; a transport failure can occur
+after Discord accepted a message, so retrying a failed broadcast may duplicate it.

@@ -31,6 +31,7 @@ class RolloverClass(TypedDict):
     campus: str
     discord_role_id: str
     discord_category_id: str
+    discord_text_channel_id: str
 
 
 class RolloverYear(TypedDict):
@@ -63,6 +64,7 @@ class _SchoolClass(TypedDict):
     academic_year_status: str
     discord_role_id: str
     discord_category_id: str
+    discord_text_channel_id: str
 
 
 class LearndStatus(TypedDict):
@@ -217,6 +219,7 @@ def fetch_rollover() -> RolloverData:
                 "campus": school_class["campus"],
                 "discord_role_id": school_class["discord_role_id"],
                 "discord_category_id": school_class["discord_category_id"],
+                "discord_text_channel_id": school_class["discord_text_channel_id"],
             }
         )
 
@@ -241,12 +244,17 @@ def patch_school_class_discord_ids(
     school_class_id: str,
     role_id: str,
     category_id: str,
+    text_channel_id: str,
 ) -> None:
     """Persist Discord resource IDs after rollover provisioning."""
     _request(
         "PATCH",
         f"/school-classes/{school_class_id}/",
-        json={"discord_role_id": role_id, "discord_category_id": category_id},
+        json={
+            "discord_role_id": role_id,
+            "discord_category_id": category_id,
+            "discord_text_channel_id": text_channel_id,
+        },
     )
 
 
@@ -367,6 +375,7 @@ def _validate_school_class(value: object) -> _SchoolClass:
         "academic_year_status": status,
         "discord_role_id": _string(value, "discord_role_id"),
         "discord_category_id": _string(value, "discord_category_id"),
+        "discord_text_channel_id": _string(value, "discord_text_channel_id"),
     }
 
 
