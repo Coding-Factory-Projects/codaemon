@@ -196,22 +196,22 @@ Codaemon authenticates to `LEARND_BASE_URL/api/v1/` with:
 Authorization: Bearer <LEARND_API_TOKEN>
 ```
 
-Onboarding looks up the active student and school-class membership through
-`school-students/`, `school-class-students/`, and `school-classes/`, then patches
-the student's `discord_user_id`.
+Onboarding looks up the active student through `school-students/`, then identifies
+its active classroom through the `classrooms/` list and the `classroom` filter on
+`school-students/`. It finally patches the student's `discord_user_id`.
 
 The admin-only `/status` command reports the configured environment, version,
 learnd URL, public health reachability, authenticated API reachability, active
 years, class count, and Discord gateway latency without exposing credentials.
 
-The admin-only `/rollover` command reads `academic-years/` and `school-classes/`.
+The admin-only `/rollover` command reads `academic-years/` and `classrooms/`.
 It keeps and renames the newest archived year using the suffix `· arch. 25-26`,
 deletes categories, child channels, and roles for every older archived year,
 then idempotently creates or completes the active year's Discord resources and
-patches their Discord IDs back to `school-classes/{id}/`. Run it first with
+patches their Discord IDs back to `classrooms/{id}/`. Run it first with
 `dry_run:true`; `dry_run:false` applies the plan and reports progress.
 
-School-class responses must include `discord_role_id`, `discord_category_id`,
+Classroom responses must include `discord_role_id`, `discord_category_id`,
 and `discord_text_channel_id` as strings (empty when not provisioned). Rollover
 identifies or creates the category's `general` text channel and patches all three
 IDs whenever any changes, including when only the text-channel ID is missing.

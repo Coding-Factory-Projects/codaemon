@@ -56,7 +56,7 @@ class _AcademicYear(TypedDict):
     status: str
 
 
-class _SchoolClass(TypedDict):
+class _Classroom(TypedDict):
     id: str
     name: str
     campus: str
@@ -119,14 +119,14 @@ def check_status() -> LearndStatus:
         ) as client:
             academic_years_response = client.get("academic-years/")
             academic_years_response.raise_for_status()
-            school_classes_response = client.get("school-classes/")
-            school_classes_response.raise_for_status()
+            classrooms_response = client.get("classrooms/")
+            classrooms_response.raise_for_status()
         academic_years = academic_years_response.json()
-        school_classes = school_classes_response.json()
+        classrooms = classrooms_response.json()
         if not isinstance(academic_years, list):
             result["api_status"] = "invalid"
             return result
-        if not isinstance(school_classes, list):
+        if not isinstance(classrooms, list):
             result["api_status"] = "invalid"
             return result
         result["active_years"] = []
@@ -139,7 +139,7 @@ def check_status() -> LearndStatus:
             if not isinstance(start_year, int):
                 continue
             result["active_years"].append(start_year)
-        result["school_class_count"] = len(school_classes)
+        result["school_class_count"] = len(classrooms)
         result["api_status"] = "ok"
     except httpx.HTTPStatusError as exc:
         if exc.response.status_code in {401, 403}:
@@ -168,23 +168,30 @@ def onboard_student(email: str, discord_user_id: str) -> OnboardStudent:
         raise LearndError("learnd returned multiple active students for the email")
     student = _validate_school_student(students[0])
 
-    memberships = _get_collection(
-        "/school-class-students/",
-        params={"student": student["id"], "academic_year_status": "active"},
-    )
-    if len(memberships) != 1:
-        raise LearndError("learnd student must belong to exactly one active school class")
-    membership = memberships[0]
-    if not isinstance(membership, dict):
-        raise LearndError("learnd returned an invalid school class membership")
-    school_class_id = _required_string(membership, "school_class")
+    active_classrooms = [
+        _validate_classroom(value)
+        for value in _get_collection("/classrooms/", params={"academic_year_status": "active"})
+    ]
+    student_classrooms: list[_Classroom] = []
+    for classroom in active_classrooms:
+        classroom_students = _get_collection(
+            "/school-students/",
+            params={
+                "email": email,
+                "classroom": classroom["id"],
+                "academic_year_status": "active",
+            },
+        )
+        if any(
+            _validate_school_student(value)["id"] == student["id"] for value in classroom_students
+        ):
+            student_classrooms.append(classroom)
 
-    school_classes = _get_collection("/school-classes/", params={"id": school_class_id})
-    if len(school_classes) != 1:
-        raise LearndError("learnd did not return the student's active school class")
-    school_class = _validate_school_class(school_classes[0])
-    if not school_class["discord_role_id"]:
-        raise LearndError("learnd school class has no Discord role ID")
+    if len(student_classrooms) != 1:
+        raise LearndError("learnd student must belong to exactly one active classroom")
+    classroom = student_classrooms[0]
+    if not classroom["discord_role_id"]:
+        raise LearndError("learnd classroom has no Discord role ID")
 
     _request(
         "PATCH",
@@ -194,7 +201,7 @@ def onboard_student(email: str, discord_user_id: str) -> OnboardStudent:
     return {
         "first_name": student["first_name"],
         "last_name": student["last_name"],
-        "discord_role_id": school_class["discord_role_id"],
+        "discord_role_id": classroom["discord_role_id"],
     }
 
 
@@ -208,8 +215,13 @@ def fetch_rollover() -> RolloverData:
         raise LearndError("learnd must return exactly one active academic year")
 
     classes_by_year: defaultdict[str, list[RolloverClass]] = defaultdict(list)
-    for value in _get_collection("/school-classes/"):
-        school_class = _validate_school_class(value)
+    classroom_values = []
+    for status in ("active", "archived"):
+        classroom_values.extend(
+            _get_collection("/classrooms/", params={"academic_year_status": status})
+        )
+    for value in classroom_values:
+        school_class = _validate_classroom(value)
         if school_class["academic_year_status"] not in {"active", "archived"}:
             continue
         classes_by_year[school_class["academic_year_id"]].append(
@@ -249,7 +261,7 @@ def patch_school_class_discord_ids(
     """Persist Discord resource IDs after rollover provisioning."""
     _request(
         "PATCH",
-        f"/school-classes/{school_class_id}/",
+        f"/classrooms/{school_class_id}/",
         json={
             "discord_role_id": role_id,
             "discord_category_id": category_id,
@@ -361,12 +373,12 @@ def _validate_academic_year(value: object) -> _AcademicYear:
     }
 
 
-def _validate_school_class(value: object) -> _SchoolClass:
+def _validate_classroom(value: object) -> _Classroom:
     if not isinstance(value, dict):
-        raise LearndError("learnd returned an invalid school class")
+        raise LearndError("learnd returned an invalid classroom")
     status = _required_string(value, "academic_year_status")
     if status not in {"planned", "active", "archived"}:
-        raise LearndError("learnd school class has an invalid academic year status")
+        raise LearndError("learnd classroom has an invalid academic year status")
     return {
         "id": _required_string(value, "id"),
         "name": _required_string(value, "name"),
