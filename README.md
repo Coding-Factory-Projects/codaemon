@@ -57,11 +57,14 @@ make dev
 cp fixtures/students.example.json fixtures/students.json
 ```
 
-`make dev` renders `.env` with Ansible. The only development secret, the Discord
-bot token, is read from `op://Private/Discord/codaemon-dev/bot token`; sign in to
-the 1Password CLI first. Non-secret development configuration lives in
-`ansible/vars/dev.yml`; rerun `make dev` after changing it. Set
-`discord_support_channel_id` there to receive onboarding failure reports.
+Install SOPS, age, and Ansible, with an authorized age identity in
+`~/.config/sops/age/keys.txt` (the same developer identity as learnd). Install
+the required collection with `ansible-galaxy collection install -r ansible/requirements.yml`.
+
+`make dev` decrypts `ansible/secrets/dev.sops.yml` and renders `.env` with Ansible.
+Non-secret development configuration lives in `ansible/vars/dev.yml`; rerun
+`make dev` after changing it. Set `discord_support_channel_id` there to receive
+onboarding failure reports.
 
 With the fixture backend, role IDs can remain empty. Start the two processes:
 
@@ -162,31 +165,44 @@ Normal deployments only copy the Compose and environment files, then restart
 the containers. Certificate issuance and renewal remain managed outside this
 playbook.
 
+### Secrets
+
+Encrypted application secrets live in `ansible/secrets/{dev,int,prod}.sops.yml`.
+Non-secret configuration lives in `ansible/vars/{common,dev,int,prod}.yml`.
+Both local development and GitHub Actions render the same environment template.
+
+```bash
+sops edit ansible/secrets/int.sops.yml
+```
+
+The recipients in `.sops.yaml` include the learnd developer recipients and a
+dedicated codaemon CI recipient. To grant access, add an age recipient and run
+`sops updatekeys` on each secrets file. Never commit decrypted secrets or private
+age identities. Normal development and deployment no longer require 1Password.
+
 ### GitHub configuration
-Create the `int` **Environment** with these secrets:
+
+Set the repository Actions secret `SOPS_AGE_KEY` to the dedicated CI age identity.
+Create the `int` and `prod` **Environments** with these secrets:
 
 | Secret | Meaning |
 |---|---|
 | `SSH_HOST` / `SSH_USER` / `SSH_KEY` | deploy SSH target (dedicated key) |
-| `SSH_FINGERPRINT` | SHA256 host-key fingerprint for `gryt-int` |
-| `DOTENV` | secret `.env` values for int (Discord, `LEARND_API_TOKEN`, `CODAEMON_API_TOKEN`, SMTP credentials, and `DISCORD_SUPPORT_CHANNEL_ID`) |
+| `SSH_FINGERPRINT` | SHA256 host-key fingerprint for the target server |
 
-Static int configuration, including non-secret SMTP settings, lives in
-`.github/environments/int.env` and uses learnd with email delivery. Each int
-deployment still copies `fixtures/students.example.json` to the server so the
-fixture backend remains available.
+INT targets `gryt-int`; PROD targets `gryt-coding`. The legacy `DOTENV` secrets
+are no longer used and can be deleted after a successful deployment.
 
-Create the `prod` **Environment** with the same four secrets, pointed at
-`gryt-coding` and the production credentials. Production's `DOTENV` must include
-the Discord credentials, `DJANGO_SECRET_KEY`, `LEARND_API_TOKEN`, `CODAEMON_API_TOKEN`, and SMTP
-credentials. Static production configuration lives in
-`.github/environments/prod.env` and uses LearnD with email delivery.
+The workflow decrypts the environment's SOPS file and renders `.env` with the
+version and immutable image tag, then copies it alongside Compose to the server.
+Both deployed environments use learnd with email delivery. Each int deployment
+still copies `fixtures/students.example.json` so the fixture backend remains
+available.
 
-The workflow combines static configuration with the secret `DOTENV`, version,
-and immutable image tag. Make the GHCR package public so the server can pull
-without credentials. To deploy production, run the `Deploy production` workflow
-on the Git ref to promote. It derives the immutable image tag and version, and
-refuses deployment unless that exact commit has a successful int workflow run.
+Make the GHCR package public so the server can pull without credentials. To
+deploy production, run the `Deploy production` workflow on the Git ref to promote.
+It derives the immutable image tag and version, and refuses deployment unless
+that exact commit has a successful int workflow run.
 
 ## learnd contract
 
@@ -240,7 +256,7 @@ learnd calls synchronous `POST /broadcast` with
 Configure a separate, high-entropy `CODAEMON_API_TOKEN` shared with learnd; it is
 not `LEARND_API_TOKEN` (which authenticates outbound requests). Missing or empty
 configuration rejects all broadcasts. Local Ansible uses `codaemon_api_token`,
-empty by default; deployed environments supply it through the secret `DOTENV`.
+empty by default; deployed environments supply it through their SOPS secrets file.
 
 All fields are required strings. Discord IDs contain ASCII digits; subject and
 message must be nonempty after trimming. At least one sender name must be

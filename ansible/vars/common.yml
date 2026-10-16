@@ -1,2 +1,18 @@
 ---
 nginx_site_filename: "codaemon-{{ project_env }}.conf"
+
+# Runtime defaults; environment-specific values override these.
+project_version: dev
+image_tag: latest
+django_debug: false
+gunicorn_workers: 2
+database_path: /app/data/db.sqlite3
+discord_client_id: ""
+discord_support_user_id: "373017678597586944"
+learnd_fixture_path: fixtures/students.json
+
+# Email
+email_host: smtp.eu.mailgun.org
+email_port: 587
+email_use_tls: true
+default_from_email: Coding Factory <bot@codingfactory.tech>

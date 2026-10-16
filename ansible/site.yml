@@ -7,14 +7,25 @@
     - vars/common.yml
     - "vars/{{ deploy_env }}.yml"
 
+  pre_tasks:
+    - name: Load encrypted environment secrets
+      community.sops.load_vars:
+        file: "{{ playbook_dir }}/secrets/{{ deploy_env }}.sops.yml"
+      no_log: true
+      tags:
+        - dev
+        - deploy
+
   tasks:
-    - name: Render local development environment
+    - name: Render application environment
       ansible.builtin.template:
         src: templates/codaemon.env.j2
-        dest: "{{ project_root }}/.env"
+        dest: "{{ env_output_path | default(project_root ~ '/.env') }}"
         mode: "0600"
       no_log: true
-      tags: dev
+      tags:
+        - dev
+        - deploy
 
     - name: Create application directory
       ansible.builtin.file:

@@ -1,0 +1,4 @@
+creation_rules:
+- path_regex: ^ansible/secrets/(dev|int|prod)\.sops\.yml$
+  age: age1c3cr2yhwpjafrvt3nykmqsvp9w5s0fxfz9m2ydh378r86ee0e9wq0k3hqd, age15dfnrms07qm28rf36g30rzeaasj00uw5ess3a8udg3gv5z4tdapqv7zmke,
+    age15z3zzketh60suyppa9t4rgw8qpdh9tzk9yda6cy8hj9nnj5el9yq530d4p

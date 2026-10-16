@@ -44,6 +44,5 @@ jobs:
       environment: prod
       image_tag: ${{ needs.resolve-image.outputs.image_tag }}
       version: ${{ needs.resolve-image.outputs.version }}
-      config_path: .github/environments/prod.env
       deploy_path: /srv/codaemon-prod
       health_url: https://codaemon.codingfactory.tech/healthz

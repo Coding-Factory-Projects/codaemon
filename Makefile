@@ -5,7 +5,7 @@
 ANSIBLE_PLAYBOOK := ansible-playbook
 
 .PHONY: dev
-dev: ## Render the local .env from Ansible and 1Password
+dev: ## Decrypt SOPS secrets and render the local .env
 	$(ANSIBLE_PLAYBOOK) --connection=local --inventory ansible/inventories/dev \
 		--extra-vars "deploy_env=dev" --tags dev ansible/site.yml
 

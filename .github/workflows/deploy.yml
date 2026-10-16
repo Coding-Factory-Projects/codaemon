@@ -67,6 +67,5 @@ jobs:
       environment: int
       image_tag: ${{ needs.build.outputs.image_tag }}
       version: ${{ needs.build.outputs.version }}
-      config_path: .github/environments/int.env
       deploy_path: /srv/codaemon-int
       health_url: https://codaemon-int.codingfactory.tech/healthz

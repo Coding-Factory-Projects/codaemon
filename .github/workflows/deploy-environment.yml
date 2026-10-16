@@ -12,9 +12,6 @@ on:
       version:
         required: true
         type: string
-      config_path:
-        required: true
-        type: string
       deploy_path:
         required: true
         type: string
@@ -36,16 +33,33 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
-      - name: Render .env
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install Ansible and SOPS
         run: |
-          printf '%s\n' "$DOTENV" > .env
-          cat '${{ inputs.config_path }}' >> .env
-          cat >> .env <<EOF
-          PROJECT_VERSION=${{ inputs.version }}
-          IMAGE_TAG=${{ inputs.image_tag }}
-          EOF
+          pip install ansible-core==2.21.5
+          ansible-galaxy collection install -r ansible/requirements.yml
+          version=3.13.3
+          base="https://github.com/getsops/sops/releases/download/v${version}"
+          binary="sops-v${version}.linux.amd64"
+          curl --fail --silent --show-error --location "$base/$binary" --output "$binary"
+          curl --fail --silent --show-error --location "$base/sops-v${version}.checksums.txt" --output checksums.txt
+          sha256sum --check --ignore-missing checksums.txt
+          sudo install -m 0755 "$binary" /usr/local/bin/sops
+          rm "$binary" checksums.txt
+      - name: Render .env from SOPS
+        run: |
+          ansible-playbook --connection=local --inventory localhost, \
+            --extra-vars "deploy_env=$DEPLOY_ENV" \
+            --extra-vars "env_output_path=$GITHUB_WORKSPACE/.env" \
+            --extra-vars "project_version=$PROJECT_VERSION image_tag=$IMAGE_TAG" \
+            --tags deploy ansible/site.yml
         env:
-          DOTENV: ${{ secrets.DOTENV }}
+          SOPS_AGE_KEY: ${{ secrets.SOPS_AGE_KEY }}
+          DEPLOY_ENV: ${{ inputs.environment }}
+          PROJECT_VERSION: ${{ inputs.version }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
       - name: Copy compose + env to server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -93,3 +107,6 @@ jobs:
             | jq --exit-status \
               --arg version '${{ inputs.version }}' \
               '.status == "ok" and .version == $version'
+      - name: Remove rendered secrets
+        if: always()
+        run: rm -f .env
